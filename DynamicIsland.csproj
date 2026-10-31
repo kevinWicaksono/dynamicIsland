@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!-- The Windows 10 TFM gives access to the media-session API (no NuGet / internet needed at runtime) -->
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>DynamicIsland</AssemblyName>
+    <RootNamespace>DynamicIsland</RootNamespace>
+  </PropertyGroup>
+
+</Project>

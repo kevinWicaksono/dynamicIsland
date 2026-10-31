@@ -1,0 +1,277 @@
+<Window x:Class="DynamicIsland.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Dynamic Island"
+        Width="520" Height="210"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        Topmost="True" ShowInTaskbar="False" ResizeMode="NoResize"
+        ShowActivated="False">
+
+    <Window.Resources>
+        <!-- Colours that the Settings window can change at runtime -->
+        <SolidColorBrush x:Key="TextBrush" Color="#FFFFFFFF" />
+        <SolidColorBrush x:Key="SubBrush" Color="#B3FFFFFF" />
+
+        <!-- Volume slider pieces -->
+        <Style x:Key="SliderFillButton" TargetType="RepeatButton">
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RepeatButton">
+                        <Grid Background="Transparent" Height="20">
+                            <Border Height="4" CornerRadius="2"
+                                    Background="{DynamicResource TextBrush}"
+                                    VerticalAlignment="Center" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SliderEmptyButton" TargetType="RepeatButton">
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RepeatButton">
+                        <Grid Background="Transparent" Height="20" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SliderThumb" TargetType="Thumb">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Ellipse Width="14" Height="14" Fill="{DynamicResource TextBrush}" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="VolumeSlider" TargetType="Slider">
+            <Setter Property="Minimum" Value="0" />
+            <Setter Property="Maximum" Value="100" />
+            <Setter Property="IsMoveToPointEnabled" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Slider">
+                        <Grid Height="20" Background="Transparent">
+                            <Border Height="4" CornerRadius="2" Background="#FF48484A"
+                                    VerticalAlignment="Center" />
+                            <Track x:Name="PART_Track">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Style="{StaticResource SliderFillButton}"
+                                                  Command="Slider.DecreaseLarge" />
+                                </Track.DecreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb Style="{StaticResource SliderThumb}" />
+                                </Track.Thumb>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Style="{StaticResource SliderEmptyButton}"
+                                                  Command="Slider.IncreaseLarge" />
+                                </Track.IncreaseRepeatButton>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Compact play/pause: icon inside a circle outline -->
+        <Style x:Key="CircleIconButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Width" Value="30" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" CornerRadius="15" BorderThickness="1.5"
+                                BorderBrush="{DynamicResource TextBrush}" Background="Transparent">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="#33FFFFFF" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="#55FFFFFF" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Flat round icon button -->
+        <Style x:Key="IconButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets" />
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="Width" Value="36" />
+            <Setter Property="Height" Value="36" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" CornerRadius="18" Background="Transparent">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="#33FFFFFF" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="#55FFFFFF" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <!-- The "island" -->
+    <Border x:Name="Island"
+            Background="Black"
+            Width="240" Height="46"
+            CornerRadius="23"
+            HorizontalAlignment="Center" VerticalAlignment="Top"
+            Margin="0,8,0,0"
+            SnapsToDevicePixels="True"
+            Opacity="0.8"
+            SizeChanged="Island_SizeChanged"
+            PreviewMouseLeftButtonDown="Island_PreviewMouseDown"
+            MouseWheel="Island_MouseWheel">
+
+        <Border.ContextMenu>
+            <ContextMenu>
+                <MenuItem Header="Settings…" Click="Settings_Click" />
+                <Separator />
+                <MenuItem Header="Exit Dynamic Island" Click="Exit_Click" />
+            </ContextMenu>
+        </Border.ContextMenu>
+
+        <Grid>
+            <!-- ============ COMPACT VIEW ============ -->
+            <StackPanel x:Name="CompactPanel"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Center" VerticalAlignment="Center">
+                <!-- Shown only while media is playing / paused: play-pause status icon + audio visualizer -->
+                <StackPanel x:Name="CompactMedia" Orientation="Horizontal"
+                            VerticalAlignment="Center" Margin="0,0,60,0"
+                            Visibility="Collapsed">
+                    <Button x:Name="CompactPlayBtn" Style="{StaticResource CircleIconButton}"
+                            Content="&#xE103;" Margin="0,0,10,0"
+                            VerticalAlignment="Center" Click="PlayPause_Click" />
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Height="22">
+                        <Border x:Name="Bar0" Width="3" Height="3" CornerRadius="1.5"
+                                Background="#FF30D158" VerticalAlignment="Center" Margin="0,0,2,0" />
+                        <Border x:Name="Bar1" Width="3" Height="3" CornerRadius="1.5"
+                                Background="#FF30D158" VerticalAlignment="Center" Margin="0,0,2,0" />
+                        <Border x:Name="Bar2" Width="3" Height="3" CornerRadius="1.5"
+                                Background="#FF30D158" VerticalAlignment="Center" Margin="0,0,2,0" />
+                        <Border x:Name="Bar3" Width="3" Height="3" CornerRadius="1.5"
+                                Background="#FF30D158" VerticalAlignment="Center" Margin="0,0,2,0" />
+                        <Border x:Name="Bar4" Width="3" Height="3" CornerRadius="1.5"
+                                Background="#FF30D158" VerticalAlignment="Center" />
+                    </StackPanel>
+                </StackPanel>
+                <TextBlock x:Name="CompactDate" Text="Mon, 1 Jan"
+                           Foreground="{DynamicResource SubBrush}" FontSize="15"
+                           VerticalAlignment="Center" />
+                <TextBlock Text="&#x2022;" Foreground="{DynamicResource SubBrush}" FontSize="13"
+                           Margin="10,0,10,0" VerticalAlignment="Center" />
+                <TextBlock x:Name="CompactTime" Text="00:00"
+                           Foreground="{DynamicResource TextBrush}" FontSize="16" FontWeight="SemiBold"
+                           VerticalAlignment="Center" />
+            </StackPanel>
+
+            <!-- ============ EXPANDED VIEW ============ -->
+            <Grid x:Name="ExpandedPanel" Margin="26,16,26,16"
+                  VerticalAlignment="Center"
+                  Visibility="Collapsed" Opacity="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!-- Date + time -->
+                <Grid Grid.Row="0">
+                    <TextBlock x:Name="DateText" Text="Monday, 1 January"
+                               Foreground="{DynamicResource SubBrush}" FontSize="15"
+                               VerticalAlignment="Center" HorizontalAlignment="Left" />
+                    <TextBlock x:Name="TimeText" Text="00:00:00"
+                               Foreground="{DynamicResource TextBrush}" FontSize="24" FontWeight="SemiBold"
+                               VerticalAlignment="Center" HorizontalAlignment="Right" />
+                </Grid>
+
+                <!-- Media -->
+                <Grid x:Name="MediaPanel" Grid.Row="1" Margin="0,12,0,0" Visibility="Collapsed">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Width="60" Height="60" CornerRadius="12"
+                            Background="#FF2C2C2E" ClipToBounds="True">
+                        <Grid>
+                            <TextBlock Text="&#x266B;" Foreground="#FF8E8E93" FontSize="22"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <Image x:Name="AlbumArt" Stretch="UniformToFill" />
+                        </Grid>
+                    </Border>
+
+                    <StackPanel Grid.Column="1" Margin="12,0,8,0" VerticalAlignment="Center">
+                        <TextBlock x:Name="TitleText" Text="Title" Foreground="{DynamicResource TextBrush}"
+                                   FontSize="16" FontWeight="SemiBold"
+                                   TextTrimming="CharacterEllipsis" />
+                        <TextBlock x:Name="ArtistText" Text="Artist" Foreground="{DynamicResource SubBrush}"
+                                   FontSize="13" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Style="{StaticResource IconButton}" Content="&#xE100;" Click="Prev_Click" />
+                        <Button x:Name="PlayPauseBtn" Style="{StaticResource IconButton}"
+                                Content="&#xE103;" FontSize="20" Click="PlayPause_Click" />
+                        <Button Style="{StaticResource IconButton}" Content="&#xE101;" Click="Next_Click" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- Volume -->
+                <Grid Grid.Row="2" Margin="0,12,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="VolumeBtn" Style="{StaticResource IconButton}"
+                            Content="&#xE767;" Width="24" Height="24" FontSize="14"
+                            Click="Mute_Click" />
+                    <!-- Snaps in 2% steps; scroll the mouse wheel over the island for +/-2% -->
+                    <Slider x:Name="VolumeSlider" Grid.Column="1"
+                            Style="{StaticResource VolumeSlider}"
+                            TickFrequency="2" IsSnapToTickEnabled="True"
+                            SmallChange="2" LargeChange="2"
+                            Margin="10,0,0,0" VerticalAlignment="Center"
+                            ValueChanged="Volume_Changed" />
+                    <TextBlock x:Name="VolumeLabel" Grid.Column="2" Text="0%"
+                               Width="44" TextAlignment="Right"
+                               Foreground="{DynamicResource SubBrush}"
+                               FontSize="13" FontWeight="SemiBold"
+                               VerticalAlignment="Center" Margin="8,0,0,0" />
+                </Grid>
+            </Grid>
+
+            <!-- ============ BORDER + PLAYBACK PROGRESS ============ -->
+            <Path x:Name="TrackPath" IsHitTestVisible="False" StrokeLineJoin="Round" />
+            <Path x:Name="ProgressPath" IsHitTestVisible="False"
+                  StrokeLineJoin="Round" StrokeDashCap="Flat" Visibility="Collapsed" />
+        </Grid>
+    </Border>
+</Window>
