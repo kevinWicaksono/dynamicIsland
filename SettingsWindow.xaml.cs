@@ -30,6 +30,7 @@ public partial class SettingsWindow : Window
         _main = main;
         InitializeComponent();
         MaxHeight = SystemParameters.WorkArea.Height - 40;   // scrolls on small screens
+        ShowAbout();
 
         foreach (var f in Fonts)
             FontBox.Items.Add(new ComboBoxItem { Content = f, FontFamily = new FontFamily(f) });
@@ -44,6 +45,19 @@ public partial class SettingsWindow : Window
 
     private AppSettings P => _main.Prefs;
 
+    // Version and author come from DynamicIsland.csproj (<Version> and <Company>)
+    private void ShowAbout()
+    {
+        var asm = System.Reflection.Assembly.GetExecutingAssembly();
+        string version = asm.GetName().Version?.ToString(3) ?? "1.0.0";
+        var company = (System.Reflection.AssemblyCompanyAttribute?)Attribute.GetCustomAttribute(
+            asm, typeof(System.Reflection.AssemblyCompanyAttribute));
+
+        AboutText.Text = string.IsNullOrWhiteSpace(company?.Company)
+            ? $"Version {version}"
+            : $"Version {version}  ·  by {company!.Company}";
+    }
+
     private void LoadControls()
     {
         _loading = true;
@@ -51,6 +65,8 @@ public partial class SettingsWindow : Window
         ThicknessSlider.Value = P.BorderThickness;
         PosXSlider.Value = P.PositionX;
         PosYSlider.Value = P.OffsetY;
+        CompactOpacitySlider.Value = P.CompactOpacity * 100;
+        ExpandedOpacitySlider.Value = P.ExpandedOpacity * 100;
         Clock12.IsChecked = !P.Use24Hour;
         Clock24.IsChecked = P.Use24Hour;
         BorderHex.Text = P.BorderColor;
@@ -65,6 +81,8 @@ public partial class SettingsWindow : Window
         ThicknessLabel.Text = $"{P.BorderThickness:0.0} px";
         PosXLabel.Text = PosXText(P.PositionX);
         PosYLabel.Text = $"{P.OffsetY:0} px";
+        CompactOpacityLabel.Text = $"{P.CompactOpacity * 100:0}%";
+        ExpandedOpacityLabel.Text = $"{P.ExpandedOpacity * 100:0}%";
         _loading = false;
     }
 
@@ -127,6 +145,22 @@ public partial class SettingsWindow : Window
     private void PosLeft_Click(object sender, RoutedEventArgs e) => PosXSlider.Value = 0;
     private void PosCenter_Click(object sender, RoutedEventArgs e) => PosXSlider.Value = 50;
     private void PosRight_Click(object sender, RoutedEventArgs e) => PosXSlider.Value = 100;
+
+    private void CompactOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_loading) return;
+        P.CompactOpacity = e.NewValue / 100.0;
+        CompactOpacityLabel.Text = $"{e.NewValue:0}%";
+        _main.ApplySettings();
+    }
+
+    private void ExpandedOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_loading) return;
+        P.ExpandedOpacity = e.NewValue / 100.0;
+        ExpandedOpacityLabel.Text = $"{e.NewValue:0}%";
+        _main.ApplySettings();
+    }
 
     private void Clock_Checked(object sender, RoutedEventArgs e)
     {

@@ -10,7 +10,7 @@
 
     <ScrollViewer VerticalScrollBarVisibility="Auto">
     <StackPanel Margin="22">
-        <TextBlock Text="Settings" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,16" />
+        <TextBlock Text="Settings" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,20" />
 
         <!-- Island size -->
         <DockPanel>
@@ -20,6 +20,23 @@
         <Slider x:Name="ScaleSlider" Minimum="0.7" Maximum="1.6"
                 TickFrequency="0.05" IsSnapToTickEnabled="True"
                 Margin="0,4,0,14" ValueChanged="Scale_Changed" />
+
+        <!-- Opacity -->
+        <DockPanel>
+            <TextBlock x:Name="CompactOpacityLabel" DockPanel.Dock="Right" Foreground="#FFB0B0B5" />
+            <TextBlock Text="Opacity when collapsed" />
+        </DockPanel>
+        <Slider x:Name="CompactOpacitySlider" Minimum="30" Maximum="100"
+                TickFrequency="5" IsSnapToTickEnabled="True"
+                Margin="0,4,0,14" ValueChanged="CompactOpacity_Changed" />
+
+        <DockPanel>
+            <TextBlock x:Name="ExpandedOpacityLabel" DockPanel.Dock="Right" Foreground="#FFB0B0B5" />
+            <TextBlock Text="Opacity when expanded" />
+        </DockPanel>
+        <Slider x:Name="ExpandedOpacitySlider" Minimum="30" Maximum="100"
+                TickFrequency="5" IsSnapToTickEnabled="True"
+                Margin="0,4,0,14" ValueChanged="ExpandedOpacity_Changed" />
 
         <!-- Position -->
         <DockPanel>
@@ -94,6 +111,8 @@
             <Button Content="Reset to defaults" Padding="14,6" Margin="0,0,8,0" Click="Reset_Click" />
             <Button Content="Done" Padding="22,6" IsDefault="True" Click="Done_Click" />
         </StackPanel>
+
+        <TextBlock x:Name="AboutText" FontSize="12" Foreground="#FF8E8E93" Margin="0,20,0,0" TextAlignment="Center" />
     </StackPanel>
     </ScrollViewer>
 </Window>

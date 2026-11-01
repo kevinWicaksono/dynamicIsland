@@ -20,6 +20,8 @@ public class AppSettings
     // true = 24-hour clock, false = 12-hour with AM/PM. First run follows your Windows setting.
     public bool Use24Hour { get; set; } =
         System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.ShortTimePattern.Contains('H');
+    public double CompactOpacity { get; set; } = 0.8;      // island opacity while collapsed (0.3 .. 1)
+    public double ExpandedOpacity { get; set; } = 1.0;     // island opacity while expanded (0.3 .. 1)
     public double PositionX { get; set; } = 50;            // 0..100 % across the screen (50 = centred)
     public double OffsetY { get; set; } = 0;               // px below the top of the screen
 
@@ -39,6 +41,8 @@ public class AppSettings
                     s.Scale = Math.Clamp(s.Scale, 0.7, 1.6);
                     s.BorderThickness = Math.Clamp(s.BorderThickness, 0, 8);
                     s.PositionX = Math.Clamp(s.PositionX, 0, 100);
+                    s.CompactOpacity = Math.Clamp(s.CompactOpacity, 0.3, 1);
+                    s.ExpandedOpacity = Math.Clamp(s.ExpandedOpacity, 0.3, 1);
                     s.OffsetY = Math.Clamp(s.OffsetY, 0, 300);
                     if (string.IsNullOrWhiteSpace(s.FontFamily)) s.FontFamily = "Segoe UI";
                     return s;

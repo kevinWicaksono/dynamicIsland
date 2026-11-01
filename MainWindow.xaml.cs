@@ -1,14 +1,18 @@
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Text;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Windows.Media.Control;
+using System.Windows.Documents;
 
 namespace DynamicIsland;
 
@@ -31,7 +35,6 @@ public partial class MainWindow : Window
     private bool _hasMedia;
     private bool _isPlaying;
     private bool _syncingVolume;
-    private bool _pinned;           // clicked → stays expanded until a click outside
     private bool _prevDown;
     private readonly DispatcherTimer _outsideTimer = new() { Interval = TimeSpan.FromMilliseconds(40) };
     private readonly DispatcherTimer _vizTimer = new() { Interval = TimeSpan.FromMilliseconds(60) };
@@ -109,6 +112,9 @@ public partial class MainWindow : Window
 
         UpdateOutline();
         UpdateProgressVisual();
+        Island.BeginAnimation(OpacityProperty, null);   // stop any running fade, then apply the new value
+        Island.Opacity = _expanded ? s.ExpandedOpacity : s.CompactOpacity;
+
         UpdateClock();   // apply the clock format right away
         if (!_expanded) UpdateCompactWidth();
     }
@@ -149,45 +155,71 @@ public partial class MainWindow : Window
 
     // ───────────────────────── Expand / collapse ─────────────────────────
 
-    // ───────────────────────── Click to pin ─────────────────────────
+    // ───────────────────────── Click behaviour ─────────────────────────
+    //  • click the collapsed island                       → expands
+    //  • click empty space on the expanded island,
+    //    or anywhere outside it                            → collapses
+    //  • click a button / the slider / the album art       → does its own job, island stays open
 
     [DllImport("user32.dll")]
     private static extern short GetAsyncKeyState(int vKey);
 
-    // The island expands ONLY when clicked, and stays expanded until the next click outside it.
     private void Island_PreviewMouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
-        if (_pinned) return;
-        if (!_expanded && CompactPlayBtn.IsMouseOver) return;   // compact play/pause: just toggle, don't expand
-        _pinned = true;
-        _prevDown = true;
         if (!_expanded)
         {
-            _expanded = true;
-            SyncVolume();
-            ApplySize();
+            if (CompactPlayBtn.IsMouseOver) return;   // compact play/pause: just toggles, doesn't expand
+            Expand();
+            return;
         }
+
+        if (!IsInteractive(e.OriginalSource as DependencyObject))
+            Collapse();                               // clicked empty space inside the island
+    }
+
+    private void Expand()
+    {
+        if (_expanded) return;
+        _expanded = true;
+        _prevDown = true;          // the press that expanded it must not count as an "outside" click
+        SyncVolume();
+        ApplySize();
         _outsideTimer.Start();
     }
 
-    // Only runs while pinned: it just asks "is a mouse button down, and is the pointer outside the island?"
+    private void Collapse()
+    {
+        if (!_expanded) return;
+        _expanded = false;
+        _outsideTimer.Stop();
+        ApplySize();
+    }
+
+    // True when the clicked element is (inside) a button, the volume slider or the album art.
+    private bool IsInteractive(DependencyObject? d)
+    {
+        while (d != null && !ReferenceEquals(d, Island))
+        {
+            if (d is System.Windows.Controls.Primitives.ButtonBase ||
+                d is System.Windows.Controls.Primitives.RangeBase ||
+                d is System.Windows.Controls.Primitives.Thumb ||
+                ReferenceEquals(d, AlbumHost))
+                return true;
+
+            d = (d is Visual || d is System.Windows.Media.Media3D.Visual3D)
+                ? VisualTreeHelper.GetParent(d)
+                : LogicalTreeHelper.GetParent(d);
+        }
+        return false;
+    }
+
+    // Only runs while expanded: it just asks "is a mouse button down, and is the pointer outside the island?"
     // Nothing is recorded and no other app's content is read.
     private void CheckOutsideClick()
     {
         bool down = (GetAsyncKeyState(0x01) & 0x8000) != 0 || (GetAsyncKeyState(0x02) & 0x8000) != 0;
-        if (down && !_prevDown && !Island.IsMouseOver) Unpin();
+        if (down && !_prevDown && !Island.IsMouseOver) Collapse();
         _prevDown = down;
-    }
-
-    private void Unpin()
-    {
-        _pinned = false;
-        _outsideTimer.Stop();
-        if (!Island.IsMouseOver)
-        {
-            _expanded = false;
-            ApplySize();
-        }
     }
 
     // Scroll over the expanded island → volume in 2% steps
@@ -198,6 +230,126 @@ public partial class MainWindow : Window
         double v = Math.Round(VolumeSlider.Value / 2) * 2 + step;
         VolumeSlider.Value = Math.Clamp(v, 0, 100);
         e.Handled = true;
+    }
+
+    // ───────────────────────── Album art click → bring the player to the front ─────────────────────────
+
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc cb, IntPtr lParam);
+    [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
+    [DllImport("user32.dll")] private static extern bool IsIconic(IntPtr hWnd);
+    [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] private static extern void SwitchToThisWindow(IntPtr hWnd, bool fAltTab);
+    [DllImport("user32.dll")] private static extern int GetWindowTextLength(IntPtr hWnd);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int maxCount);
+    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
+    private static extern int GetWindowLong(IntPtr hWnd, int index);
+
+    private void Album_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        BringPlayerToFront();
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Finds the window of the app that is playing the media and brings it to the front.
+    /// Best effort: it matches the media session's app id to a running process, and prefers the
+    /// window whose title contains the track title (handy for browsers with many windows).
+    /// Runs only when the album art is clicked; nothing is stored.
+    /// </summary>
+    private void BringPlayerToFront()
+    {
+        var session = _session;
+        if (session == null) return;
+
+        string appId = session.SourceAppUserModelId ?? "";
+        string trackTitle = TitleText.Text ?? "";
+
+        // 1) Which processes belong to the player?
+        string? exactName = null;
+        var keywords = new List<string>();
+        void AddKeyword(string k)
+        {
+            if (k.Length >= 4 && !keywords.Contains(k, StringComparer.OrdinalIgnoreCase)) keywords.Add(k);
+        }
+
+        string id = appId;
+        if (id.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+        {
+            id = id[..^4];
+            exactName = id;                                   // e.g. "Spotify" / "vlc"
+        }
+
+        int bang = id.IndexOf('!');
+        if (bang >= 0)                                        // packaged app, e.g. "SpotifyAB.SpotifyMusic_xxx!Spotify"
+        {
+            AddKeyword(id[(bang + 1)..]);
+            string pkg = id[..bang];
+            int us = pkg.IndexOf('_');
+            if (us >= 0) pkg = pkg[..us];
+            AddKeyword(pkg[(pkg.LastIndexOf('.') + 1)..]);
+        }
+        else
+        {
+            AddKeyword(id);                                   // e.g. "Chrome", "MSEdge"
+            AddKeyword(id[(id.LastIndexOf('.') + 1)..]);
+        }
+
+        var pids = new HashSet<uint>();
+        foreach (var p in Process.GetProcesses())
+        {
+            try
+            {
+                string n = p.ProcessName;
+                bool hit = (exactName != null && n.Equals(exactName, StringComparison.OrdinalIgnoreCase))
+                           || keywords.Any(k => n.Contains(k, StringComparison.OrdinalIgnoreCase));
+                if (hit) pids.Add((uint)p.Id);
+            }
+            catch { /* protected process – ignore */ }
+            finally { p.Dispose(); }
+        }
+
+        // 2) Pick the best visible top-level window
+        IntPtr procAndTitle = IntPtr.Zero, titleOnly = IntPtr.Zero, procOnly = IntPtr.Zero;
+        uint self = (uint)Environment.ProcessId;
+
+        EnumWindows((h, _) =>
+        {
+            if (!IsWindowVisible(h)) return true;
+            if ((GetWindowLong(h, -20) & 0x80) != 0) return true;   // skip tool windows
+            int len = GetWindowTextLength(h);
+            if (len == 0) return true;
+
+            GetWindowThreadProcessId(h, out uint pid);
+            if (pid == self) return true;                           // not our own windows
+
+            var sb = new StringBuilder(len + 1);
+            GetWindowText(h, sb, sb.Capacity);
+            string t = sb.ToString();
+
+            bool byProc = pids.Contains(pid);
+            bool byTitle = trackTitle.Length > 0 && t.Contains(trackTitle, StringComparison.OrdinalIgnoreCase);
+
+            if (byProc && byTitle) { if (procAndTitle == IntPtr.Zero) procAndTitle = h; }
+            else if (byTitle)      { if (titleOnly == IntPtr.Zero) titleOnly = h; }
+            else if (byProc)       { if (procOnly == IntPtr.Zero) procOnly = h; }
+            return true;
+        }, IntPtr.Zero);
+
+        IntPtr target = procAndTitle != IntPtr.Zero ? procAndTitle
+                      : titleOnly != IntPtr.Zero ? titleOnly
+                      : procOnly;
+        if (target == IntPtr.Zero) return;                          // couldn't find it – do nothing
+
+        // 3) Bring it forward
+        if (IsIconic(target)) ShowWindow(target, 9);                // SW_RESTORE
+        if (!SetForegroundWindow(target) || GetForegroundWindow() != target)
+            SwitchToThisWindow(target, true);
     }
 
     private const double CompactPaddingX = 20;   // horizontal padding inside the compact island
@@ -225,7 +377,7 @@ public partial class MainWindow : Window
 
         Animate(Island, WidthProperty, w, 350);
         Animate(Island, HeightProperty, h, 350);
-        Animate(Island, OpacityProperty, _expanded ? 1.0 : 0.8, 250);
+        Animate(Island, OpacityProperty, _expanded ? Prefs.ExpandedOpacity : Prefs.CompactOpacity, 250);
 
         if (_expanded)
         {

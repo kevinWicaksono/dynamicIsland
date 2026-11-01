@@ -8,7 +8,7 @@
 [Setup]
 AppId={{6F928009-6937-4FCA-A6BF-F88BBB43F28E}
 AppName={#AppName}
-AppVersion=1.0.0
+AppVersion=1.1.0
 AppPublisher=Kevin Wicaksono
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}

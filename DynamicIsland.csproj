@@ -9,6 +9,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>DynamicIsland</AssemblyName>
     <RootNamespace>DynamicIsland</RootNamespace>
+    <!-- Shown in Settings. Change these when you release a new version. -->
+    <Version>1.1.0</Version>
+    <Product>Dynamic Island</Product>
+    <Authors>Kevin Wicaksono</Authors>
   </PropertyGroup>
 
 </Project>

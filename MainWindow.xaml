@@ -218,7 +218,9 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <Border Grid.Column="0" Width="60" Height="60" CornerRadius="12"
+                    <Border x:Name="AlbumHost" Grid.Column="0" Width="60" Height="60" CornerRadius="12"
+                            Cursor="Hand" ToolTip="Show player window"
+                            MouseLeftButtonUp="Album_Click"
                             Background="#FF2C2C2E" ClipToBounds="True">
                         <Grid>
                             <TextBlock Text="&#x266B;" Foreground="#FF8E8E93" FontSize="22"

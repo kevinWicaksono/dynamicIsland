@@ -6,16 +6,16 @@ Built with C# and WPF (.NET 8). It runs fully offline and has no networking code
 
 ## Download
 
-Get the latest installer from the [Releases page](https://github.com/kevinWicaksono/DynamicIsland/releases/tag/v1.0.0).
+Get the latest installer from the [Releases page](https://github.com/kevinWicaksono/dynamicIsland/releases/tag/v1.1.0).
 No build tools needed. Run `DynamicIslandSetup.exe`.
 
 ## Features
 
-- **Compact pill:** date and time, 12-hour or 24-hour. When media is active it also shows a circled play/pause button and a live audio visualizer. The pill is 80% opaque.
-- **Expanded view (click the island):** full date, time with seconds, album art, title, artist, previous / play-pause / next buttons, and a volume slider with a percentage readout. It is 100% opaque and stays open until you click outside it.
+- **Compact pill:** date and time, 12-hour or 24-hour. When media is active it also shows a circled play/pause button and a live audio visualizer. Its opacity is adjustable (80% by default).
+- **Expanded view (click the island):** full date, time with seconds, album art, title, artist, previous / play-pause / next buttons, and a volume slider with a percentage readout. It is 100% opaque by default. Click empty space on it, or anywhere outside it, to collapse it. Click the album art to bring the player's window to the front.
 - **Playback progress border:** while media plays, the island's border fills clockwise to show how far through the track you are.
 - **Volume control:** snaps in 2% steps. Scroll the mouse wheel over the expanded island for ±2%.
-- **Settings (right-click → Settings…):** island size, horizontal position and distance from top, border thickness and color, island color, text color, font, and clock format. Changes apply live.
+- **Settings (right-click → Settings…):** island size, horizontal position and distance from top, opacity when collapsed and when expanded, border thickness and color, island color, text color, font, and clock format. Changes apply live.
 - Right-click the island → **Exit Dynamic Island** to close it.
 
 ## Requirements
@@ -32,7 +32,7 @@ No build tools needed. Run `DynamicIslandSetup.exe`.
 - Windows 10 / 11, x64
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
 - Internet access for the first build only, so `dotnet` can download packages. The app itself never uses the network.
-- *(Optional, for the installer)* [Inno Setup 6](https://jrsoftware.org/isinfo.php)
+- *(Optional, for the installer)* [Inno Setup](https://jrsoftware.org/isdl.php)
 
 Check your SDK with:
 
@@ -45,7 +45,7 @@ dotnet --version
 Clone the repository and open a terminal in the project folder (the one containing `DynamicIsland.csproj`):
 
 ```powershell
-git clone <your-repo-url>
+git clone https://github.com/kevinWicaksono/dynamicIsland
 cd <repo-folder>
 ```
 
@@ -78,7 +78,7 @@ bin\Release\net8.0-windows10.0.19041.0\win-x64\publish\
 ### Build the installer
 
 1. Publish the app as a self-contained single file (command above).
-2. Install Inno Setup 6.
+2. Install Inno Setup.
 3. Compile the script, either by opening `DynamicIsland.iss` in Inno Setup and pressing **F9**, or from the terminal:
 
 ```powershell
@@ -91,8 +91,9 @@ The installer is created at `installer\DynamicIslandSetup.exe`. It installs for 
 
 | Action | What happens |
 |---|---|
-| Click the island | Expands it, and it stays open |
-| Click anywhere outside it | Collapses it |
+| Click the collapsed island | Expands it |
+| Click empty space on the expanded island, or anywhere outside it | Collapses it |
+| Click the album art (expanded) | Brings the player's window to the front |
 | Click the circled ⏸/▶ in the compact pill | Plays or pauses without expanding |
 | Scroll over the expanded island | Volume ±2% |
 | Right-click the island | Settings… / Exit |
@@ -104,6 +105,7 @@ The installer is created at `installer\DynamicIslandSetup.exe`. It installs for 
 - **Media info:** the current track's title, artist and artwork come live from the Windows media session service. They are kept in memory only and never saved or sent anywhere.
 - **Visualizer and volume:** the app reads the current output level (one number) and the master volume through Windows' audio API. No audio is recorded.
 - **Click outside to collapse:** while the island is expanded, it checks whether a mouse button is pressed and whether the pointer is over the island. Nothing is recorded.
+- **Album art click:** to find the player's window, the app briefly looks at the names of running processes and the titles of open windows. It uses them only to pick one window, keeps nothing, and does this only when you click the album art.
 - **Saved settings:** the only thing written to disk is `%AppData%\DynamicIsland\settings.json`, which holds your appearance preferences. Delete that folder to reset everything. The installer's uninstaller removes it too.
 
 ## Project structure
