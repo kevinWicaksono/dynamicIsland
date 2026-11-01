@@ -6,7 +6,7 @@ Built with C# and WPF (.NET 8). It runs fully offline and has no networking code
 
 ## Download
 
-Get the latest installer from the [Releases page](https://github.com/<you>/<repo>/releases/latest).
+Get the latest installer from the [Releases page](https://github.com/kevinWicaksono/DynamicIsland/releases/tag/v1.0.0).
 No build tools needed. Run `DynamicIslandSetup.exe`.
 
 ## Features
