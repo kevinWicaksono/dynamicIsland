@@ -4,6 +4,11 @@ An iPhone-style "Dynamic Island" for your Windows desktop: a small pill at the t
 
 Built with C# and WPF (.NET 8). It runs fully offline and has no networking code.
 
+## Download
+
+Get the latest installer from the [Releases page](https://github.com/<you>/<repo>/releases/latest).
+No build tools needed. Run `DynamicIslandSetup.exe`.
+
 ## Features
 
 - **Compact pill:** date and time, 12-hour or 24-hour. When media is active it also shows a circled play/pause button and a live audio visualizer. The pill is 80% opaque.
