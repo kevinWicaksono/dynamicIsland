@@ -10,7 +10,8 @@
 
     <ScrollViewer VerticalScrollBarVisibility="Auto">
     <StackPanel Margin="22">
-        <TextBlock Text="Settings" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,20" />
+        <TextBlock Text="Settings" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,2" />
+        <TextBlock x:Name="AboutText" FontSize="12" Foreground="#FF8E8E93" Margin="0,0,0,16" />
 
         <!-- Island size -->
         <DockPanel>
@@ -37,6 +38,7 @@
         <Slider x:Name="ExpandedOpacitySlider" Minimum="30" Maximum="100"
                 TickFrequency="5" IsSnapToTickEnabled="True"
                 Margin="0,4,0,14" ValueChanged="ExpandedOpacity_Changed" />
+
 
         <!-- Position -->
         <DockPanel>
@@ -111,8 +113,6 @@
             <Button Content="Reset to defaults" Padding="14,6" Margin="0,0,8,0" Click="Reset_Click" />
             <Button Content="Done" Padding="22,6" IsDefault="True" Click="Done_Click" />
         </StackPanel>
-
-        <TextBlock x:Name="AboutText" FontSize="12" Foreground="#FF8E8E93" Margin="0,20,0,0" TextAlignment="Center" />
     </StackPanel>
     </ScrollViewer>
 </Window>

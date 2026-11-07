@@ -3,17 +3,18 @@
 
 #define AppName "Dynamic Island"
 #define AppExe  "DynamicIsland.exe"
+#define AppVersion "1.1.1"
 #define PublishDir "bin\Release\net8.0-windows10.0.19041.0\win-x64\publish"
 
 [Setup]
 AppId={{6F928009-6937-4FCA-A6BF-F88BBB43F28E}
 AppName={#AppName}
-AppVersion=1.1.0
+AppVersion={#AppVersion}
 AppPublisher=Kevin Wicaksono
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 OutputDir=installer
-OutputBaseFilename=DynamicIslandSetup
+OutputBaseFilename=DynamicIslandSetup-{#AppVersion}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern

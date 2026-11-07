@@ -37,12 +37,19 @@ public partial class MainWindow : Window
     private bool _syncingVolume;
     private bool _prevDown;
     private readonly DispatcherTimer _outsideTimer = new() { Interval = TimeSpan.FromMilliseconds(40) };
-    private readonly DispatcherTimer _vizTimer = new() { Interval = TimeSpan.FromMilliseconds(60) };
-    private System.Windows.Controls.Border[] _bars = Array.Empty<System.Windows.Controls.Border>();
-    private readonly double[] _barH = new double[5];
+    private readonly DispatcherTimer _vizTimer = new(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(33) };
+    private System.Windows.Controls.Border[] _bars = Array.Empty<System.Windows.Controls.Border>();      // compact view
+    private System.Windows.Controls.Border[] _barsExp = Array.Empty<System.Windows.Controls.Border>();   // expanded view
+    private readonly double[] _barH = new double[7];
     private double _level;
-    private static readonly double[] BarSpeed = { 7.0, 9.5, 6.0, 11.0, 8.0 };
-    private static readonly double[] BarPhase = { 0.0, 1.3, 2.6, 3.9, 5.2 };
+    private double _olX0, _olY0, _olX1, _olY1, _olR;   // the border outline (used for click-to-seek)
+    private long _seekHoldUntil;             // after a jump, ignore stale player timeline for a moment
+    private bool _scrubbing;                 // dragging on the progress border
+    private double _scrubFraction;
+    private System.Windows.Controls.ToolTip? _hintTip;   // small "1:23 / 3:45" bubble
+    private DispatcherTimer? _hintTimer;
+    private static readonly double[] BarSpeed = { 7.0, 9.5, 6.0, 11.0, 8.0, 10.0, 6.5 };
+    private static readonly double[] BarPhase = { 0.0, 1.3, 2.6, 3.9, 5.2, 0.7, 2.0 };
 
     private bool _hasProgress;
     private double _progress;       // 0..1
@@ -55,7 +62,8 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        _bars = new[] { Bar0, Bar1, Bar2, Bar3, Bar4 };
+        _bars = new[] { Bar0, Bar1, Bar2, Bar3, Bar4, Bar5, Bar6 };
+        _barsExp = new[] { ExpBar0, ExpBar1, ExpBar2, ExpBar3, ExpBar4, ExpBar5, ExpBar6 };
         ApplySettings();
 
         UpdateClock();
@@ -98,7 +106,7 @@ public partial class MainWindow : Window
 
         Island.LayoutTransform = new ScaleTransform(s.Scale, s.Scale);
         Width = 520 * s.Scale;
-        Height = 210 * s.Scale;
+        Height = 230 * s.Scale;
         var area = SystemParameters.WorkArea;
         Left = area.Left + (area.Width - Width) * (s.PositionX / 100.0);
         Top = Math.Min(s.OffsetY, Math.Max(0, area.Bottom - Height));
@@ -106,7 +114,7 @@ public partial class MainWindow : Window
         var border = Frozen(ParseColor(s.BorderColor, Color.FromRgb(0x30, 0xD1, 0x58)));
         TrackPath.Stroke = border;
         ProgressPath.Stroke = border;
-        foreach (var b in _bars) b.Background = border;
+        foreach (var b in _bars.Concat(_barsExp)) b.Background = border;
         TrackPath.StrokeThickness = s.BorderThickness;
         ProgressPath.StrokeThickness = s.BorderThickness;
 
@@ -166,15 +174,37 @@ public partial class MainWindow : Window
 
     private void Island_PreviewMouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
+        // Pressing on the border (or the thin halo just outside it): jump / scrub in the track.
+        // Works when the island is collapsed or expanded.
+        if (Prefs.BorderThickness > 0.05 &&
+            TryGetProgressFraction(e.GetPosition(Island), out double fraction))
+        {
+            if (_hasProgress)
+            {
+                BeginScrub(fraction);
+                e.Handled = true;
+                return;
+            }
+
+            if (_expanded && _hasMedia)
+            {
+                ShowHint("This player doesn't report the track length", 2500);
+                e.Handled = true;
+                return;
+            }
+        }
+
+        bool onHalo = ReferenceEquals(e.OriginalSource, Halo);   // the invisible ring around the island
+
         if (!_expanded)
         {
-            if (CompactPlayBtn.IsMouseOver) return;   // compact play/pause: just toggles, doesn't expand
+            if (onHalo || CompactPlayBtn.IsMouseOver) return;     // only the island itself expands; play/pause just toggles
             Expand();
             return;
         }
 
-        if (!IsInteractive(e.OriginalSource as DependencyObject))
-            Collapse();                               // clicked empty space inside the island
+        if (onHalo || !IsInteractive(e.OriginalSource as DependencyObject))
+            Collapse();                                           // clicked empty space, or outside the island
     }
 
     private void Expand()
@@ -218,7 +248,8 @@ public partial class MainWindow : Window
     private void CheckOutsideClick()
     {
         bool down = (GetAsyncKeyState(0x01) & 0x8000) != 0 || (GetAsyncKeyState(0x02) & 0x8000) != 0;
-        if (down && !_prevDown && !Island.IsMouseOver) Collapse();
+        if (_scrubbing) { _prevDown = down; return; }
+        if (down && !_prevDown && !Halo.IsMouseOver) Collapse();
         _prevDown = down;
     }
 
@@ -352,28 +383,36 @@ public partial class MainWindow : Window
             SwitchToThisWindow(target, true);
     }
 
-    private const double CompactPaddingX = 20;   // horizontal padding inside the compact island
+    private const double CompactPadding = 14;    // padding inside the collapsed island – the same on all four sides
 
-    /// <summary>Compact width = width of its content + 20 px padding on the left and right.</summary>
+    /// <summary>Collapsed size = size of its content + the same padding on every side.</summary>
     private double CompactWidth()
     {
         CompactPanel.Visibility = Visibility.Visible;   // must be visible to be measured
         CompactPanel.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        return Math.Ceiling(CompactPanel.DesiredSize.Width) + CompactPaddingX * 2;
+        return Math.Ceiling(CompactPanel.DesiredSize.Width) + CompactPadding * 2;
+    }
+
+    // Call right after CompactWidth (which measures the panel): same padding on top and bottom
+    private double CompactHeight()
+    {
+        return Math.Ceiling(CompactPanel.DesiredSize.Height) + CompactPadding * 2;
     }
 
     // Text (time, date) can change width, so keep the 20 px padding exact
     private void UpdateCompactWidth()
     {
         double w = CompactWidth();
+        double h = CompactHeight();
         if (Math.Abs(w - Island.Width) > 1.5) Animate(Island, WidthProperty, w, 250);
+        if (Math.Abs(h - Island.Height) > 1.5) Animate(Island, HeightProperty, h, 250);
     }
 
     private void ApplySize()
     {
         double w, h;
-        if (_expanded) { w = 460; h = _hasMedia ? 180 : 108; }
-        else           { w = CompactWidth(); h = 46; }
+        if (_expanded) { w = 460; h = _hasMedia ? 200 : 90; }
+        else           { w = CompactWidth(); h = CompactHeight(); }
 
         Animate(Island, WidthProperty, w, 350);
         Animate(Island, HeightProperty, h, 350);
@@ -438,6 +477,7 @@ public partial class MainWindow : Window
             c.ArcTo(new Point(x0 + r, y0), new Size(r, r), 0, false, SweepDirection.Clockwise, true, false);
         }
         g.Freeze();
+        _olX0 = x0; _olY0 = y0; _olX1 = x1; _olY1 = y1; _olR = r;
 
         TrackPath.Data = g;
         ProgressPath.Data = g;
@@ -479,6 +519,7 @@ public partial class MainWindow : Window
     {
         var session = _session;
         if (session == null || !_hasMedia) return;
+        if (Environment.TickCount64 < _seekHoldUntil) return;   // just jumped: wait for the player to report the new position
 
         try
         {
@@ -500,38 +541,287 @@ public partial class MainWindow : Window
 
     // ───────────────────────── Media ─────────────────────────
 
-// ───────────────────────── Audio visualizer ─────────────────────────
+    // ───────────────────────── Audio visualizer ─────────────────────────
+
+    private readonly double[] _hist = new double[4];   // output level history: newest → oldest
+    private double _peakRef = 0.1;                      // slow auto-gain reference
+    private long _lastShiftMs;
+
+    // How "picky" the bars are. Higher = bars stay lower and only the loudest hits reach the top.
+    // 1.0 = linear (easy to reach the top), 2.0 = default, 3.0 = very picky.
+    private const double VisualizerContrast = 3.0;
 
     /// <summary>
-    /// Five bars next to the play/pause icon. Heights follow the live output peak level of the
-    /// default playback device (a single 0..1 number – no audio is captured).
-    /// Bars are flat while paused.
+    /// Seven bars next to the play/pause icon (and next to the album art when expanded), driven by the live output level of the default playback
+    /// device (a single 0..1 number – no audio is captured). The centre bar shows the level right now
+    /// and the outer bars show slightly older levels, so every beat visibly ripples outward.
+    /// An auto-gain keeps the bars lively on quiet and loud tracks alike. Bars are flat while paused.
     /// </summary>
     private void UpdateVisualizer()
     {
-        if (!_hasMedia || CompactPanel.Visibility != Visibility.Visible) return;
+        if (!_hasMedia) return;
 
-        const double minH = 3, maxH = 20;
+        const double minH = 2, maxH = 13;
+        long nowMs = Environment.TickCount64;
+        double t = nowMs / 1000.0;
 
-        double raw = 0;
+        double lvl = 0;
+        bool simulated = false;
+
         if (_isPlaying)
         {
             var peak = AudioVolume.GetPeak();
-            raw = peak ?? 0.4;      // meter unavailable → gentle idle animation instead
+            if (peak.HasValue)
+            {
+                double raw = peak.Value;
+                // auto-gain: the reference follows the loudest recent peak and decays slowly
+                _peakRef = Math.Max(0.08, Math.Max(raw, _peakRef * 0.997));
+                lvl = Math.Pow(Math.Min(1.0, raw / _peakRef), VisualizerContrast);
+            }
+            else
+            {
+                simulated = true;       // level meter unavailable → gentle idle animation
+            }
         }
 
-        // fast attack, slow decay
-        _level = raw > _level ? raw : _level * 0.85 + raw * 0.15;
-        double lvl = Math.Min(1.0, Math.Sqrt(_level) * 1.4);
+        // newest level updates every frame; history shifts every ~70 ms
+        _hist[0] = lvl;
+        if (nowMs - _lastShiftMs >= 70)
+        {
+            _hist[3] = _hist[2];
+            _hist[2] = _hist[1];
+            _hist[1] = _hist[0];
+            _lastShiftMs = nowMs;
+        }
 
-        double t = Environment.TickCount64 / 1000.0;
+        // mirrored layout: oldest · older · old · NEWEST · old · older · oldest
+        double[] levels = { _hist[3], _hist[2], _hist[1], _hist[0], _hist[1], _hist[2], _hist[3] };
+
         for (int i = 0; i < _bars.Length; i++)
         {
-            double wave = 0.5 + 0.5 * Math.Sin(t * BarSpeed[i] + BarPhase[i]);
-            double target = minH + (maxH - minH) * lvl * (0.35 + 0.65 * wave);
-            _barH[i] += (target - _barH[i]) * 0.5;
+            double level = simulated
+                ? 0.35 + 0.25 * Math.Sin(t * BarSpeed[i] + BarPhase[i])
+                : levels[i];
+
+            double target = minH + (maxH - minH) * level;
+            double k = target > _barH[i] ? 0.85 : 0.35;          // fast attack, quick release
+            _barH[i] += (target - _barH[i]) * k;
             _bars[i].Height = Math.Max(minH, _barH[i]);
+
+            // same movement, taller, for the bars in the expanded view
+            double frac = (Math.Max(minH, _barH[i]) - minH) / (maxH - minH);
+            _barsExp[i].Height = 2 + 12 * frac;
         }
+    }
+
+    // ───────────────────────── Click the border to jump in the track ─────────────────────────
+
+    // While dragging: follow the pointer around the border. Otherwise: hand cursor over the border.
+    private void Island_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        var pos = e.GetPosition(Island);
+
+        if (_scrubbing)
+        {
+            if (TryGetProgressFraction(pos, out double f, anyDistance: true)) UpdateScrub(f);
+            return;
+        }
+
+        bool onBar = _hasProgress && Prefs.BorderThickness > 0.05 && TryGetProgressFraction(pos, out _);
+        Halo.Cursor = onBar ? System.Windows.Input.Cursors.Hand : null;
+    }
+
+    /// <summary>
+    /// If the point (in island coordinates) is on, or within a few pixels of, the border outline, returns how far
+    /// around the outline it is: 0..1, starting at the top centre and running clockwise (the progress arc's scale).
+    /// With anyDistance = true it returns the nearest point however far away (used while dragging).
+    /// </summary>
+    private bool TryGetProgressFraction(Point p, out double fraction, bool anyDistance = false)
+    {
+        fraction = 0;
+        if (_olR <= 0 || _perimeter <= 0) return false;
+
+        double x0 = _olX0, y0 = _olY0, x1 = _olX1, y1 = _olY1, r = _olR;
+        double cx = (x0 + x1) / 2;
+        double bestD = double.MaxValue, bestLen = 0, cum = 0;
+
+        // nearest point on a straight piece of the outline
+        void Straight(double ax, double ay, double bx, double by)
+        {
+            double dx = bx - ax, dy = by - ay;
+            double len = Math.Sqrt(dx * dx + dy * dy);
+            if (len > 0)
+            {
+                double t = Math.Clamp(((p.X - ax) * dx + (p.Y - ay) * dy) / (len * len), 0, 1);
+                double qx = ax + t * dx, qy = ay + t * dy;
+                double d = (p.X - qx) * (p.X - qx) + (p.Y - qy) * (p.Y - qy);
+                if (d < bestD) { bestD = d; bestLen = cum + t * len; }
+            }
+            cum += len;
+        }
+
+        // nearest point on a quarter-circle corner (angles in radians, a0 < a1, clockwise on screen)
+        void Arc(double ccx, double ccy, double a0, double a1)
+        {
+            double ang = Math.Atan2(p.Y - ccy, p.X - ccx);
+            if (ang < a0 - Math.PI) ang += 2 * Math.PI;
+            else if (ang > a0 + Math.PI) ang -= 2 * Math.PI;
+            double a = Math.Clamp(ang, a0, a1);
+            double qx = ccx + r * Math.Cos(a), qy = ccy + r * Math.Sin(a);
+            double d = (p.X - qx) * (p.X - qx) + (p.Y - qy) * (p.Y - qy);
+            if (d < bestD) { bestD = d; bestLen = cum + r * (a - a0); }
+            cum += r * (a1 - a0);
+        }
+
+        double q = Math.PI / 2;
+        Straight(cx, y0, x1 - r, y0);                 // top edge, right half
+        Arc(x1 - r, y0 + r, -q, 0);                   // top-right corner
+        Straight(x1, y0 + r, x1, y1 - r);             // right edge
+        Arc(x1 - r, y1 - r, 0, q);                    // bottom-right corner
+        Straight(x1 - r, y1, x0 + r, y1);             // bottom edge
+        Arc(x0 + r, y1 - r, q, 2 * q);                // bottom-left corner
+        Straight(x0, y1 - r, x0, y0 + r);             // left edge
+        Arc(x0 + r, y0 + r, 2 * q, 3 * q);            // top-left corner
+        Straight(x0 + r, y0, cx, y0);                 // top edge, left half
+
+        if (cum <= 0) return false;
+
+        // The line is thin, so accept clicks in a wider band around it (and on the halo just outside it)
+        double tolerance = Math.Max(10, Prefs.BorderThickness / 2 + 6);
+        if (!anyDistance && bestD > tolerance * tolerance) return false;
+
+        fraction = Math.Clamp(bestLen / cum, 0, 1);
+        return true;
+    }
+
+    private void BeginScrub(double fraction)
+    {
+        _scrubbing = true;
+        _prevDown = true;
+        Island.CaptureMouse();          // keep receiving mouse moves even if the pointer leaves the island
+        UpdateScrub(fraction);
+    }
+
+    private void UpdateScrub(double fraction)
+    {
+        _scrubFraction = Math.Clamp(fraction, 0, 1);
+        _seekHoldUntil = long.MaxValue;     // while dragging, ignore the player's own timeline updates
+        SetProgress(true, _scrubFraction);
+
+        try
+        {
+            var tl = _session?.GetTimelineProperties();
+            if (tl != null)
+            {
+                var span = tl.EndTime - tl.StartTime;
+                ShowHint($"{FormatTime(TimeSpan.FromTicks((long)(span.Ticks * _scrubFraction)))} / {FormatTime(span)}");
+            }
+        }
+        catch { /* no timeline – the arc still moves */ }
+    }
+
+    private void Island_PreviewMouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (!_scrubbing) return;
+        _scrubbing = false;
+        Island.ReleaseMouseCapture();
+        e.Handled = true;
+        CommitScrub();
+    }
+
+    private void Island_LostCapture(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (!_scrubbing) return;
+        _scrubbing = false;                 // capture lost (for example Alt+Tab): cancel without jumping
+        _seekHoldUntil = 0;
+        CloseHint();
+    }
+
+    private async void CommitScrub()
+    {
+        bool ok = await SeekToFractionAsync(_scrubFraction);
+        if (ok) CloseHint();
+        else ShowHint("This player doesn't allow jumping in the track", 2500);
+    }
+
+    private async Task<bool> SeekToFractionAsync(double fraction)
+    {
+        var session = _session;
+        if (session == null) return false;
+        fraction = Math.Clamp(fraction, 0, 1);
+
+        try
+        {
+            var tl = session.GetTimelineProperties();
+            var span = tl.EndTime - tl.StartTime;
+            if (span.TotalSeconds < 1) { _seekHoldUntil = 0; return false; }
+
+            // show the jump right away; the player reports the new position a moment later
+            _seekHoldUntil = Environment.TickCount64 + 1200;
+            SetProgress(true, fraction);
+
+            var target = tl.StartTime + TimeSpan.FromTicks((long)(span.Ticks * fraction));
+            bool ok = await session.TryChangePlaybackPositionAsync(target.Ticks);
+            if (!ok)
+            {
+                _seekHoldUntil = 0;         // the player refused: go back to its real position
+                UpdateProgress();
+            }
+            return ok;
+        }
+        catch
+        {
+            _seekHoldUntil = 0;
+            return false;
+        }
+    }
+
+    private static string FormatTime(TimeSpan t) =>
+        t.TotalHours >= 1
+            ? $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}"
+            : $"{(int)t.TotalMinutes}:{t.Seconds:00}";
+
+    // A small bubble under the island: shows the time while dragging, or a short message
+    private void ShowHint(string text, int autoCloseMs = 0)
+    {
+        _hintTip ??= new System.Windows.Controls.ToolTip
+        {
+            PlacementTarget = Island,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom,
+            VerticalOffset = 6,
+            Background = Frozen(Color.FromRgb(0x1C, 0x1C, 0x1E)),
+            Foreground = Brushes.White,
+            BorderThickness = new Thickness(0),
+            Padding = new Thickness(10, 5, 10, 5),
+            StaysOpen = true,
+            Focusable = false,
+            IsHitTestVisible = false
+        };
+
+        _hintTip.Content = text;
+
+        // centre it under the island
+        _hintTip.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        _hintTip.HorizontalOffset = (Island.ActualWidth * Prefs.Scale - _hintTip.DesiredSize.Width) / 2;
+        _hintTip.IsOpen = true;
+
+        if (_hintTimer == null)
+        {
+            _hintTimer = new DispatcherTimer();
+            _hintTimer.Tick += (_, _) => CloseHint();
+        }
+        _hintTimer.Stop();
+        if (autoCloseMs > 0)
+        {
+            _hintTimer.Interval = TimeSpan.FromMilliseconds(autoCloseMs);
+            _hintTimer.Start();
+        }
+    }
+
+    private void CloseHint()
+    {
+        _hintTimer?.Stop();
+        if (_hintTip != null) _hintTip.IsOpen = false;
     }
 
     private async Task InitMediaAsync()
