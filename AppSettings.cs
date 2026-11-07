@@ -5,8 +5,7 @@ using System.Text.Json;
 namespace DynamicIsland;
 
 /// <summary>
-/// The user's appearance preferences. Saved as a tiny JSON file in
-/// %AppData%\DynamicIsland\settings.json (only these six values – nothing else).
+/// The user's preferences, saved in %AppData%\DynamicIsland\settings.json.
 /// Delete that folder to reset everything.
 /// </summary>
 public class AppSettings
@@ -24,6 +23,7 @@ public class AppSettings
     public double ExpandedOpacity { get; set; } = 1.0;     // island opacity while expanded (0.3 .. 1)
     public double PositionX { get; set; } = 50;            // 0..100 % across the screen (50 = centred)
     public double OffsetY { get; set; } = 0;               // px below the top of the screen
+    public bool ShowSpotifyLyrics { get; set; }
 
     private static string FilePath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),

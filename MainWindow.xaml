@@ -226,7 +226,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="150" />
                     </Grid.ColumnDefinitions>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -245,17 +245,13 @@
                         </Grid>
                     </Border>
 
-                    <!-- Artist (large) with the song name under it, to the right of the thumbnail -->
+                    <!-- Track title, artist, and visualizer -->
                     <StackPanel Grid.Row="0" Grid.Column="1" Margin="14,0,8,0" VerticalAlignment="Center">
-                        <TextBlock x:Name="ArtistText" Text="Artist" Foreground="{DynamicResource TextBrush}"
+                        <TextBlock x:Name="TitleText" Text="Song name" Foreground="{DynamicResource TextBrush}"
                                    FontSize="17" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                        <TextBlock x:Name="TitleText" Text="Song name" Foreground="{DynamicResource SubBrush}"
+                        <TextBlock x:Name="ArtistText" Text="Artist" Foreground="{DynamicResource SubBrush}"
                                    FontSize="13" TextTrimming="CharacterEllipsis" Margin="0,3,0,0" />
-                    </StackPanel>
-
-                    <!-- Audio visualizer (top-right) -->
-                    <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal"
-                                VerticalAlignment="Top" Height="16" Margin="0,2,0,0">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Height="16" Margin="0,7,0,0">
                             <Border x:Name="ExpBar0" Width="2" Height="2" CornerRadius="1"
                                     Background="#FF30D158" VerticalAlignment="Center" Margin="0,0,2,0" />
                             <Border x:Name="ExpBar1" Width="2" Height="2" CornerRadius="1"
@@ -270,6 +266,26 @@
                                     Background="#FF30D158" VerticalAlignment="Center" Margin="0,0,2,0" />
                             <Border x:Name="ExpBar6" Width="2" Height="2" CornerRadius="1"
                                     Background="#FF30D158" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- Current and upcoming lyric -->
+                    <StackPanel x:Name="LyricsPanel" Grid.Row="0" Grid.Column="2"
+                                VerticalAlignment="Center" Margin="8,0,0,0" Visibility="Collapsed">
+                        <StackPanel x:Name="SyncedLyricsPanel">
+                            <TextBlock x:Name="CurrentLyricText" Foreground="{DynamicResource TextBrush}"
+                                       FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap"
+                                       TextTrimming="CharacterEllipsis" MaxHeight="42" />
+                            <TextBlock x:Name="NextLyricText" Foreground="{DynamicResource SubBrush}"
+                                       FontSize="11" TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
+                                       MaxHeight="36" Margin="0,6,0,0" />
+                        </StackPanel>
+                        <ScrollViewer x:Name="PlainLyricsScroll" Height="88" Margin="0,0,4,0"
+                                      VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                      Visibility="Collapsed">
+                            <TextBlock x:Name="PlainLyricsText" Foreground="{DynamicResource TextBrush}"
+                                       FontSize="12" TextWrapping="Wrap" />
+                        </ScrollViewer>
                     </StackPanel>
 
                     <!-- Controls, under the thumbnail -->
@@ -282,6 +298,7 @@
                         <Button Style="{StaticResource IconButton}" Content="&#xE101;"
                                 Width="24" Height="24" FontSize="12" Click="Next_Click" />
                     </StackPanel>
+
                 </Grid>
 
                 <!-- Volume -->

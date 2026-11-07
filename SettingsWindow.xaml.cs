@@ -69,6 +69,7 @@ public partial class SettingsWindow : Window
         ExpandedOpacitySlider.Value = P.ExpandedOpacity * 100;
         Clock12.IsChecked = !P.Use24Hour;
         Clock24.IsChecked = P.Use24Hour;
+        ShowLyricsCheckBox.IsChecked = P.ShowSpotifyLyrics;
         BorderHex.Text = P.BorderColor;
         IslandHex.Text = P.IslandColor;
         TextHex.Text = P.TextColor;
@@ -169,6 +170,13 @@ public partial class SettingsWindow : Window
         _main.ApplySettings();
     }
 
+    private void ShowLyrics_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        P.ShowSpotifyLyrics = ShowLyricsCheckBox.IsChecked == true;
+        _main.RefreshLyricsSetting();
+    }
+
     private void Color_TextChanged(object sender, TextChangedEventArgs e)
     {
         if (_loading) return;
@@ -201,6 +209,7 @@ public partial class SettingsWindow : Window
         _main.Prefs = new AppSettings();
         _main.ApplySettings();
         LoadControls();
+        _main.RefreshLyricsSetting();
     }
 
     private void Done_Click(object sender, RoutedEventArgs e) => Close();

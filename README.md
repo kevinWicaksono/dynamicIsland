@@ -2,7 +2,7 @@
 
 An iPhone-style "Dynamic Island" for your Windows desktop: a small pill at the top of the screen that shows the date and time, and whatever media is currently playing. Click it to expand it into a full view with playback and volume controls.
 
-Built with C# and WPF (.NET 8). It runs fully offline and has no networking code.
+Built with C# and WPF (.NET 8). It works offline by default; optional media lyrics use an online lookup.
 
 ## Download
 
@@ -12,10 +12,11 @@ No build tools needed. Run `DynamicIslandSetup.exe`.
 ## Features
 
 - **Compact pill:** date and time, 12-hour or 24-hour. When media is active it also shows a circled play/pause button and a live audio visualizer. Its opacity is adjustable (80% by default).
-- **Expanded view (click the island):** full date, time with seconds, album art, title, artist, previous / play-pause / next buttons, and a volume slider with a percentage readout. It is 100% opaque by default. Click empty space on it, or anywhere outside it, to collapse it. Click the album art to bring the player's window to the front.
+- **Expanded view (click the island):** full date, time with seconds, album art, song title, artist, audio visualizer, current and next lyric lines, previous / play-pause / next buttons, and a volume slider with a percentage readout. It is 100% opaque by default. Click empty space on it, or anywhere outside it, to collapse it. Click the album art to bring the player's window to the front.
 - **Playback progress border:** while media plays, the island's border fills clockwise to show how far through the track you are.
+- **Media lyrics (optional):** enable lyric lookup in Settings to show the current and next synced lines, or plain lyrics when timing data is unavailable. Works with Spotify and browser media sessions (including YouTube) when Windows provides track metadata. Lyrics are looked up through [LRCLIB](https://lrclib.net).
 - **Volume control:** snaps in 2% steps. Scroll the mouse wheel over the expanded island for ±2%.
-- **Settings (right-click → Settings…):** island size, horizontal position and distance from top, opacity when collapsed and when expanded, border thickness and color, island color, text color, font, and clock format. Changes apply live.
+- **Settings (right-click → Settings…):** island size, horizontal position and distance from top, opacity when collapsed and when expanded, border thickness and color, island color, text color, font, clock format, and optional lyrics. Changes apply live.
 - Right-click the island → **Exit Dynamic Island** to close it.
 
 ## Requirements
@@ -26,12 +27,13 @@ No build tools needed. Run `DynamicIslandSetup.exe`.
 - 64-bit (x64)
 - Nothing else if you use the self-contained build or the installer. The .NET runtime is included.
 - For media info, a player that uses the Windows media controls (Spotify, most browsers, Windows Media Player, VLC and others).
+- An internet connection is needed only if you enable lyrics in Settings.
 
 ### To build from source
 
 - Windows 10 / 11, x64
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-- Internet access for the first build only, so `dotnet` can download packages. The app itself never uses the network.
+- Internet access for the first build so `dotnet` can download packages. The app makes no runtime network requests unless optional lyrics are enabled.
 - *(Optional, for the installer)* [Inno Setup](https://jrsoftware.org/isdl.php)
 
 Check your SDK with:
@@ -100,13 +102,13 @@ The installer is created at `installer\DynamicIslandSetup.exe`. It installs for 
 
 ## Privacy and offline use
 
-- No networking code, telemetry or update checks. It works with Wi-Fi off.
+- No telemetry or update checks. By default, the app makes no network requests and works with Wi-Fi off. If lyrics are enabled in Settings, the current media title and artist are sent to LRCLIB to find lyrics; no player credentials are used or sent.
 - It never reads or scans your files. The font list in Settings is a fixed list, not a scan of your computer.
-- **Media info:** the current track's title, artist and artwork come live from the Windows media session service. They are kept in memory only and never saved or sent anywhere.
+- **Media info:** the current track's title, artist and artwork come live from the Windows media session service. They are kept in memory only and never saved. Track title and artist are sent only to LRCLIB when optional lyrics are enabled.
 - **Visualizer and volume:** the app reads the current output level (one number) and the master volume through Windows' audio API. No audio is recorded.
 - **Click outside to collapse:** while the island is expanded, it checks whether a mouse button is pressed and whether the pointer is over the island. Nothing is recorded.
 - **Album art click:** to find the player's window, the app briefly looks at the names of running processes and the titles of open windows. It uses them only to pick one window, keeps nothing, and does this only when you click the album art.
-- **Saved settings:** the only thing written to disk is `%AppData%\DynamicIsland\settings.json`, which holds your appearance preferences. Delete that folder to reset everything. The installer's uninstaller removes it too.
+- **Saved settings:** `%AppData%\DynamicIsland\settings.json` holds your appearance preferences and whether lyrics are enabled. Delete that folder to reset everything. The installer's uninstaller removes it too.
 
 ## Project structure
 
@@ -115,6 +117,7 @@ The installer is created at `installer\DynamicIslandSetup.exe`. It installs for 
 | `MainWindow.xaml` / `.xaml.cs` | The island: layout, animations, media, progress border, visualizer |
 | `SettingsWindow.xaml` / `.xaml.cs` | The settings window |
 | `AppSettings.cs` | Settings model and saving/loading |
+| `LyricsService.cs` | Optional LRCLIB lyric lookup and synced-line parsing |
 | `AudioVolume.cs` | System volume, mute and output-level access through Windows Core Audio |
 | `App.xaml` / `App.xaml.cs` | Application entry point |
 | `DynamicIsland.csproj` | Project file (.NET 8, WPF) |

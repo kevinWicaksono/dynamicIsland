@@ -5,6 +5,8 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Runtime.InteropServices;
+using System.Net.Http;
+using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
@@ -18,7 +20,7 @@ namespace DynamicIsland;
 
 /// <summary>
 /// A Dynamic-Island-style overlay for Windows.
-///  - Offline: contains no networking code.
+///  - No network use unless optional media lyrics are enabled.
 ///  - Media info comes live from Windows' media-session service and is kept in memory only.
 ///  - The only thing saved to disk is the user's own appearance settings.
 /// </summary>
@@ -30,6 +32,11 @@ public partial class MainWindow : Window
     private GlobalSystemMediaTransportControlsSessionManager? _manager;
     private GlobalSystemMediaTransportControlsSession? _session;
     private SettingsWindow? _settingsWindow;
+    private CancellationTokenSource? _lyricsCancellation;
+    private string? _lyricsTrackKey;
+    private IReadOnlyList<TimedLyricLine> _timedLyrics = Array.Empty<TimedLyricLine>();
+    private string? _lastDisplayedLyric;
+    private string? _lastDisplayedNextLyric;
 
     private bool _expanded;
     private bool _hasMedia;
@@ -86,6 +93,189 @@ public partial class MainWindow : Window
             SyncVolume();
             await InitMediaAsync();
         };
+    }
+
+    // ───────────────────────── Optional media lyrics ─────────────────────────
+
+    public void RefreshLyricsSetting()
+    {
+        var session = _session;
+        if (session == null || !_hasMedia || !Prefs.ShowSpotifyLyrics)
+        {
+            ClearLyrics();
+            return;
+        }
+
+        StartLyricsLookup(session, TitleText.Text, ArtistText.Text);
+    }
+
+    private void UpdateLyricsForMedia(
+        GlobalSystemMediaTransportControlsSession session,
+        GlobalSystemMediaTransportControlsSessionMediaProperties props)
+    {
+        if (!Prefs.ShowSpotifyLyrics)
+        {
+            ClearLyrics();
+            return;
+        }
+
+        string artist = string.IsNullOrWhiteSpace(props.Artist) ? "Unknown artist" : props.Artist;
+        StartLyricsLookup(session, props.Title, artist);
+    }
+
+    private void StartLyricsLookup(
+        GlobalSystemMediaTransportControlsSession session,
+        string title,
+        string artist)
+    {
+        const string youtubeSuffix = " - YouTube";
+        if (title.EndsWith(youtubeSuffix, StringComparison.OrdinalIgnoreCase))
+            title = title[..^youtubeSuffix.Length].TrimEnd();
+
+        string key = $"{session.SourceAppUserModelId}\n{artist}\n{title}";
+        if (string.Equals(key, _lyricsTrackKey, StringComparison.OrdinalIgnoreCase)) return;
+
+        _lyricsCancellation?.Cancel();
+        var cancellation = new CancellationTokenSource();
+        _lyricsCancellation = cancellation;
+        _lyricsTrackKey = key;
+        _timedLyrics = Array.Empty<TimedLyricLine>();
+        _lastDisplayedLyric = null;
+        _lastDisplayedNextLyric = null;
+        CurrentLyricText.Text = "Loading lyrics…";
+        NextLyricText.Text = "";
+        SyncedLyricsPanel.Visibility = Visibility.Visible;
+        PlainLyricsScroll.Visibility = Visibility.Collapsed;
+        LyricsPanel.Visibility = Visibility.Visible;
+        _ = LoadLyricsAsync(key, title, artist, cancellation);
+    }
+
+    private async Task LoadLyricsAsync(
+        string key,
+        string title,
+        string artist,
+        CancellationTokenSource cancellation)
+    {
+        try
+        {
+            var lyrics = await LyricsService.GetLyricsAsync(title, artist, cancellation.Token);
+            if (!ReferenceEquals(_lyricsCancellation, cancellation) ||
+                !string.Equals(_lyricsTrackKey, key, StringComparison.Ordinal))
+                return;
+
+            if (lyrics == null)
+            {
+                CurrentLyricText.Text = "Lyrics not found";
+                return;
+            }
+
+            _timedLyrics = lyrics.TimedLines;
+            if (_timedLyrics.Count > 0)
+            {
+                UpdateCurrentLyric(_session);
+            }
+            else if (!string.IsNullOrWhiteSpace(lyrics.PlainLyrics))
+            {
+                PlainLyricsText.Text = lyrics.PlainLyrics;
+                SyncedLyricsPanel.Visibility = Visibility.Collapsed;
+                PlainLyricsScroll.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                CurrentLyricText.Text = "Lyrics not found";
+            }
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+        }
+        catch (OperationCanceledException)
+        {
+            if (ReferenceEquals(_lyricsCancellation, cancellation))
+                CurrentLyricText.Text = "Lyrics unavailable";
+        }
+        catch (HttpRequestException)
+        {
+            if (ReferenceEquals(_lyricsCancellation, cancellation))
+                CurrentLyricText.Text = "Lyrics unavailable";
+        }
+        catch (JsonException)
+        {
+            if (ReferenceEquals(_lyricsCancellation, cancellation))
+                CurrentLyricText.Text = "Lyrics unavailable";
+        }
+        catch (IOException)
+        {
+            if (ReferenceEquals(_lyricsCancellation, cancellation))
+                CurrentLyricText.Text = "Lyrics unavailable";
+        }
+        finally
+        {
+            if (ReferenceEquals(_lyricsCancellation, cancellation))
+                _lyricsCancellation = null;
+            cancellation.Dispose();
+        }
+    }
+
+    private void UpdateCurrentLyric(GlobalSystemMediaTransportControlsSession? session)
+    {
+        if (_timedLyrics.Count == 0 || session == null) return;
+
+        try
+        {
+            var timeline = session.GetTimelineProperties();
+            var position = timeline.Position;
+            if (_isPlaying) position += DateTimeOffset.Now - timeline.LastUpdatedTime;
+
+            int currentIndex = 0;
+            foreach (var timedLine in _timedLyrics)
+            {
+                if (timedLine.Timestamp > position) break;
+                currentIndex++;
+            }
+
+            if (currentIndex > 0) currentIndex--;
+            string currentLine = _timedLyrics[currentIndex].Text;
+            string nextLine = currentIndex + 1 < _timedLyrics.Count
+                ? _timedLyrics[currentIndex + 1].Text
+                : "";
+            if (!string.Equals(currentLine, _lastDisplayedLyric, StringComparison.Ordinal))
+            {
+                CurrentLyricText.Text = currentLine;
+                _lastDisplayedLyric = currentLine;
+            }
+            if (!string.Equals(nextLine, _lastDisplayedNextLyric, StringComparison.Ordinal))
+            {
+                NextLyricText.Text = nextLine;
+                _lastDisplayedNextLyric = nextLine;
+            }
+        }
+        catch (COMException)
+        {
+            // Keep the first lyric visible if the player doesn't expose a timeline.
+            if (_lastDisplayedLyric == null)
+            {
+                CurrentLyricText.Text = _timedLyrics[0].Text;
+                _lastDisplayedLyric = _timedLyrics[0].Text;
+                NextLyricText.Text = _timedLyrics.Count > 1 ? _timedLyrics[1].Text : "";
+                _lastDisplayedNextLyric = NextLyricText.Text;
+            }
+        }
+    }
+
+    private void ClearLyrics()
+    {
+        _lyricsCancellation?.Cancel();
+        _lyricsCancellation = null;
+        _lyricsTrackKey = null;
+        _timedLyrics = Array.Empty<TimedLyricLine>();
+        _lastDisplayedLyric = null;
+        _lastDisplayedNextLyric = null;
+        LyricsPanel.Visibility = Visibility.Collapsed;
+        SyncedLyricsPanel.Visibility = Visibility.Visible;
+        PlainLyricsScroll.Visibility = Visibility.Collapsed;
+        PlainLyricsText.Text = "";
+        CurrentLyricText.Text = "";
+        NextLyricText.Text = "";
     }
 
     // ───────────────────────── Settings ─────────────────────────
@@ -233,7 +423,8 @@ public partial class MainWindow : Window
             if (d is System.Windows.Controls.Primitives.ButtonBase ||
                 d is System.Windows.Controls.Primitives.RangeBase ||
                 d is System.Windows.Controls.Primitives.Thumb ||
-                ReferenceEquals(d, AlbumHost))
+                ReferenceEquals(d, AlbumHost) ||
+                ReferenceEquals(d, LyricsPanel))
                 return true;
 
             d = (d is Visual || d is System.Windows.Media.Media3D.Visual3D)
@@ -257,6 +448,7 @@ public partial class MainWindow : Window
     private void Island_MouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
     {
         if (!_expanded) return;
+        if (LyricsPanel.IsMouseOver) return;
         double step = e.Delta > 0 ? 2 : -2;
         double v = Math.Round(VolumeSlider.Value / 2) * 2 + step;
         VolumeSlider.Value = Math.Clamp(v, 0, 100);
@@ -519,6 +711,7 @@ public partial class MainWindow : Window
     {
         var session = _session;
         if (session == null || !_hasMedia) return;
+        UpdateCurrentLyric(session);
         if (Environment.TickCount64 < _seekHoldUntil) return;   // just jumped: wait for the player to report the new position
 
         try
@@ -888,6 +1081,7 @@ public partial class MainWindow : Window
 
             TitleText.Text = props.Title;
             ArtistText.Text = string.IsNullOrWhiteSpace(props.Artist) ? "Unknown artist" : props.Artist;
+            UpdateLyricsForMedia(session, props);
             PlayPauseBtn.Content = _isPlaying ? "\uE103" : "\uE102";
             CompactPlayBtn.Content = _isPlaying ? "\uE103" : "\uE102";   // pause icon while playing, play icon while paused
             CompactMedia.Visibility = Visibility.Visible;
@@ -940,6 +1134,7 @@ public partial class MainWindow : Window
 
     private void SetNoMedia()
     {
+        ClearLyrics();
         _isPlaying = false;
         MediaPanel.Visibility = Visibility.Collapsed;
         CompactMedia.Visibility = Visibility.Collapsed;

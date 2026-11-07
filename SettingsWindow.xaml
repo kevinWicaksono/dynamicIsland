@@ -109,6 +109,13 @@
                          Foreground="White" Checked="Clock_Checked" />
         </StackPanel>
 
+        <!-- Lyrics -->
+        <CheckBox x:Name="ShowLyricsCheckBox" Content="Show lyrics"
+                  Foreground="White" Margin="0,0,0,4"
+                  Checked="ShowLyrics_Changed" Unchecked="ShowLyrics_Changed" />
+        <TextBlock Text="No sign-in is needed."
+                   FontSize="11" Foreground="#FF8E8E93" TextWrapping="Wrap" Margin="0,0,0,18" />
+
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Content="Reset to defaults" Padding="14,6" Margin="0,0,8,0" Click="Reset_Click" />
             <Button Content="Done" Padding="22,6" IsDefault="True" Click="Done_Click" />
