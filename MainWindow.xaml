@@ -251,7 +251,8 @@
                                    FontSize="17" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                         <TextBlock x:Name="ArtistText" Text="Artist" Foreground="{DynamicResource SubBrush}"
                                    FontSize="13" TextTrimming="CharacterEllipsis" Margin="0,3,0,0" />
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Height="16" Margin="0,7,0,0">
+                        <StackPanel x:Name="ExpandedVisualizerUnderArtist" Orientation="Horizontal"
+                                    VerticalAlignment="Center" Height="16" Margin="0,7,0,0">
                             <Border x:Name="ExpBar0" Width="2" Height="2" CornerRadius="1"
                                     Background="#FF30D158" VerticalAlignment="Center" Margin="0,0,2,0" />
                             <Border x:Name="ExpBar1" Width="2" Height="2" CornerRadius="1"
@@ -267,6 +268,25 @@
                             <Border x:Name="ExpBar6" Width="2" Height="2" CornerRadius="1"
                                     Background="#FF30D158" VerticalAlignment="Center" />
                         </StackPanel>
+                    </StackPanel>
+
+                    <StackPanel x:Name="LyricsOffVisualizer" Grid.Row="0" Grid.Column="2"
+                                Orientation="Horizontal" HorizontalAlignment="Right"
+                                VerticalAlignment="Top" Height="16" Visibility="Collapsed">
+                        <Border x:Name="LyricsBar0" Width="2" Height="2" CornerRadius="1"
+                                Background="#FF30D158" VerticalAlignment="Center" Margin="0,0,2,0" />
+                        <Border x:Name="LyricsBar1" Width="2" Height="2" CornerRadius="1"
+                                Background="#FF30D158" VerticalAlignment="Center" Margin="0,0,2,0" />
+                        <Border x:Name="LyricsBar2" Width="2" Height="2" CornerRadius="1"
+                                Background="#FF30D158" VerticalAlignment="Center" Margin="0,0,2,0" />
+                        <Border x:Name="LyricsBar3" Width="2" Height="2" CornerRadius="1"
+                                Background="#FF30D158" VerticalAlignment="Center" Margin="0,0,2,0" />
+                        <Border x:Name="LyricsBar4" Width="2" Height="2" CornerRadius="1"
+                                Background="#FF30D158" VerticalAlignment="Center" Margin="0,0,2,0" />
+                        <Border x:Name="LyricsBar5" Width="2" Height="2" CornerRadius="1"
+                                Background="#FF30D158" VerticalAlignment="Center" Margin="0,0,2,0" />
+                        <Border x:Name="LyricsBar6" Width="2" Height="2" CornerRadius="1"
+                                Background="#FF30D158" VerticalAlignment="Center" />
                     </StackPanel>
 
                     <!-- Current and upcoming lyric -->

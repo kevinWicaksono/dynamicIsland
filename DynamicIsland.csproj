@@ -10,9 +10,10 @@
     <AssemblyName>DynamicIsland</AssemblyName>
     <RootNamespace>DynamicIsland</RootNamespace>
     <!-- Shown in Settings. Change these when you release a new version. -->
-    <Version>1.2.0</Version>
+    <Version>1.3.0</Version>
     <Product>Dynamic Island</Product>
     <Authors>Kevin Wicaksono</Authors>
+    <Company>Kevin Wicaksono</Company>
   </PropertyGroup>
 
 </Project>

@@ -9,6 +9,7 @@ using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
@@ -47,6 +48,7 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _vizTimer = new(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(33) };
     private System.Windows.Controls.Border[] _bars = Array.Empty<System.Windows.Controls.Border>();      // compact view
     private System.Windows.Controls.Border[] _barsExp = Array.Empty<System.Windows.Controls.Border>();   // expanded view
+    private System.Windows.Controls.Border[] _barsLyrics = Array.Empty<System.Windows.Controls.Border>();
     private readonly double[] _barH = new double[7];
     private double _level;
     private double _olX0, _olY0, _olX1, _olY1, _olR;   // the border outline (used for click-to-seek)
@@ -61,16 +63,22 @@ public partial class MainWindow : Window
     private bool _hasProgress;
     private double _progress;       // 0..1
     private double _perimeter;      // length of the border outline
+    private bool _islandRegionUpdateQueued;
 
     private static readonly IEasingFunction Ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+    private const int WcaAccentPolicy = 19;
+    private const int AccentDisabled = 0;
+    private const int AccentEnableAcrylicBlurBehind = 4;
 
     public AppSettings Prefs { get; set; } = AppSettings.Load();
 
     public MainWindow()
     {
         InitializeComponent();
+        SourceInitialized += (_, _) => ApplyWindowBackdrop();
         _bars = new[] { Bar0, Bar1, Bar2, Bar3, Bar4, Bar5, Bar6 };
         _barsExp = new[] { ExpBar0, ExpBar1, ExpBar2, ExpBar3, ExpBar4, ExpBar5, ExpBar6 };
+        _barsLyrics = new[] { LyricsBar0, LyricsBar1, LyricsBar2, LyricsBar3, LyricsBar4, LyricsBar5, LyricsBar6 };
         ApplySettings();
 
         UpdateClock();
@@ -90,6 +98,7 @@ public partial class MainWindow : Window
 
         Loaded += async (_, _) =>
         {
+            QueueIslandRegionUpdate();
             SyncVolume();
             await InitMediaAsync();
         };
@@ -99,6 +108,7 @@ public partial class MainWindow : Window
 
     public void RefreshLyricsSetting()
     {
+        UpdateExpandedVisualizerPlacement();
         var session = _session;
         if (session == null || !_hasMedia || !Prefs.ShowSpotifyLyrics)
         {
@@ -276,6 +286,14 @@ public partial class MainWindow : Window
         PlainLyricsText.Text = "";
         CurrentLyricText.Text = "";
         NextLyricText.Text = "";
+        UpdateExpandedVisualizerPlacement();
+    }
+
+    private void UpdateExpandedVisualizerPlacement()
+    {
+        bool showAtLyricsPosition = !Prefs.ShowSpotifyLyrics;
+        ExpandedVisualizerUnderArtist.Visibility = showAtLyricsPosition ? Visibility.Collapsed : Visibility.Visible;
+        LyricsOffVisualizer.Visibility = showAtLyricsPosition ? Visibility.Visible : Visibility.Collapsed;
     }
 
     // ───────────────────────── Settings ─────────────────────────
@@ -289,7 +307,9 @@ public partial class MainWindow : Window
         Resources["TextBrush"] = Frozen(text);
         Resources["SubBrush"] = Frozen(Color.FromArgb(0xB3, text.R, text.G, text.B));
 
-        Island.Background = Frozen(ParseColor(s.IslandColor, Colors.Black));
+        var islandColor = ParseColor(s.IslandColor, Colors.Black);
+        Island.Background = s.FrostedGlass ? Brushes.Transparent : Frozen(islandColor);
+        ApplyWindowBackdrop(islandColor);
 
         try { TextElement.SetFontFamily(Island, new FontFamily(s.FontFamily)); }
         catch { TextElement.SetFontFamily(Island, new FontFamily("Segoe UI")); }
@@ -304,7 +324,8 @@ public partial class MainWindow : Window
         var border = Frozen(ParseColor(s.BorderColor, Color.FromRgb(0x30, 0xD1, 0x58)));
         TrackPath.Stroke = border;
         ProgressPath.Stroke = border;
-        foreach (var b in _bars.Concat(_barsExp)) b.Background = border;
+        foreach (var b in _bars.Concat(_barsExp).Concat(_barsLyrics)) b.Background = border;
+        UpdateExpandedVisualizerPlacement();
         TrackPath.StrokeThickness = s.BorderThickness;
         ProgressPath.StrokeThickness = s.BorderThickness;
 
@@ -315,7 +336,147 @@ public partial class MainWindow : Window
 
         UpdateClock();   // apply the clock format right away
         if (!_expanded) UpdateCompactWidth();
+        QueueIslandRegionUpdate();
     }
+
+    private void ApplyWindowBackdrop() => ApplyWindowBackdrop(ParseColor(Prefs.IslandColor, Colors.Black));
+
+    private void ApplyWindowBackdrop(Color tint)
+    {
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle == IntPtr.Zero) return;
+
+        var policy = new AccentPolicy
+        {
+            AccentState = Prefs.FrostedGlass ? AccentEnableAcrylicBlurBehind : AccentDisabled,
+            AccentFlags = 2,
+            GradientColor = (0xCCu << 24) | ((uint)tint.B << 16) | ((uint)tint.G << 8) | tint.R
+        };
+        var size = Marshal.SizeOf<AccentPolicy>();
+        var memory = Marshal.AllocHGlobal(size);
+        try
+        {
+            Marshal.StructureToPtr(policy, memory, false);
+            var data = new WindowCompositionAttributeData
+            {
+                Attribute = WcaAccentPolicy,
+                Data = memory,
+                SizeOfData = size
+            };
+            if (!SetWindowCompositionAttribute(handle, ref data))
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    $"Could not apply the frosted-glass backdrop (Win32 error {Marshal.GetLastWin32Error()}).");
+                if (Prefs.FrostedGlass) Island.Background = Frozen(tint);
+            }
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(memory);
+        }
+
+        QueueIslandRegionUpdate();
+    }
+
+    private void QueueIslandRegionUpdate()
+    {
+        if (_islandRegionUpdateQueued) return;
+        _islandRegionUpdateQueued = true;
+        Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(() =>
+        {
+            _islandRegionUpdateQueued = false;
+            UpdateIslandRegion();
+        }));
+    }
+
+    private void UpdateIslandRegion()
+    {
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle == IntPtr.Zero) return;
+
+        if (!Prefs.FrostedGlass)
+        {
+            if (SetWindowRgn(handle, IntPtr.Zero, true) == 0)
+                System.Diagnostics.Trace.TraceWarning(
+                    $"Could not remove the island window region (Win32 error {Marshal.GetLastWin32Error()}).");
+            return;
+        }
+
+        if (!IsLoaded || Island.ActualWidth <= 0 || Island.ActualHeight <= 0) return;
+
+        var bounds = Island.TransformToAncestor(this)
+            .TransformBounds(new Rect(Island.RenderSize));
+        var targetWidth = bounds.Width + Halo.Padding.Left + Halo.Padding.Right;
+        var targetHeight = bounds.Height + Halo.Padding.Top + Halo.Padding.Bottom;
+        if (Math.Abs(Width - targetWidth) > 0.5 || Math.Abs(Height - targetHeight) > 0.5)
+        {
+            Width = targetWidth;
+            Height = targetHeight;
+            var area = SystemParameters.WorkArea;
+            Left = area.Left + (area.Width - Width) * (Prefs.PositionX / 100.0);
+            QueueIslandRegionUpdate();
+            return;
+        }
+
+        var dpi = VisualTreeHelper.GetDpi(this);
+        var insetX = 6 + Prefs.BorderThickness / 2;
+        var insetY = 8 + Prefs.BorderThickness / 2;
+        var left = (int)Math.Floor((bounds.Left - insetX) * dpi.DpiScaleX);
+        var top = (int)Math.Floor((bounds.Top - insetY) * dpi.DpiScaleY);
+        var right = (int)Math.Ceiling((bounds.Right + insetX) * dpi.DpiScaleX);
+        var bottom = (int)Math.Ceiling((bounds.Bottom + insetY) * dpi.DpiScaleY);
+        var cornerRadius = Island.CornerRadius.TopLeft * Prefs.Scale;
+        var ellipseWidth = (int)Math.Ceiling(2 * (cornerRadius + insetX) * dpi.DpiScaleX);
+        var ellipseHeight = (int)Math.Ceiling(2 * (cornerRadius + insetY) * dpi.DpiScaleY);
+        var region = CreateRoundRectRgn(left, top, right, bottom, ellipseWidth, ellipseHeight);
+        if (region == IntPtr.Zero)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"Could not create the island window region (Win32 error {Marshal.GetLastWin32Error()}).");
+            return;
+        }
+
+        if (SetWindowRgn(handle, region, true) == 0)
+        {
+            var error = Marshal.GetLastWin32Error();
+            DeleteObject(region);
+            System.Diagnostics.Trace.TraceWarning(
+                $"Could not constrain the frosted-glass backdrop (Win32 error {error}).");
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct AccentPolicy
+    {
+        public int AccentState;
+        public int AccentFlags;
+        public uint GradientColor;
+        public int AnimationId;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WindowCompositionAttributeData
+    {
+        public int Attribute;
+        public IntPtr Data;
+        public int SizeOfData;
+    }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowCompositionAttribute(
+        IntPtr hwnd, ref WindowCompositionAttributeData data);
+
+    [DllImport("gdi32.dll", SetLastError = true)]
+    private static extern IntPtr CreateRoundRectRgn(
+        int left, int top, int right, int bottom, int ellipseWidth, int ellipseHeight);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern int SetWindowRgn(IntPtr hwnd, IntPtr region, [MarshalAs(UnmanagedType.Bool)] bool redraw);
+
+    [DllImport("gdi32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool DeleteObject(IntPtr handle);
 
     private static Color ParseColor(string hex, Color fallback)
     {
@@ -636,6 +797,7 @@ public partial class MainWindow : Window
     {
         Island.CornerRadius = new CornerRadius(Math.Min(e.NewSize.Height / 2, 36));
         UpdateOutline();
+        QueueIslandRegionUpdate();
     }
 
     // ───────────────────────── Border outline + progress ─────────────────────────
@@ -804,6 +966,7 @@ public partial class MainWindow : Window
             // same movement, taller, for the bars in the expanded view
             double frac = (Math.Max(minH, _barH[i]) - minH) / (maxH - minH);
             _barsExp[i].Height = 2 + 12 * frac;
+            _barsLyrics[i].Height = 2 + 12 * frac;
         }
     }
 

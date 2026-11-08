@@ -11,19 +11,18 @@ namespace DynamicIsland;
 public class AppSettings
 {
     public double Scale { get; set; } = 1.0;               // island size multiplier
-    public double BorderThickness { get; set; } = 3;       // also the progress-bar thickness
-    public string BorderColor { get; set; } = "#30D158";
-    public string IslandColor { get; set; } = "#000000";
-    public string TextColor { get; set; } = "#FFFFFF";
+    public double BorderThickness { get; set; } = 2;       // also the progress-bar thickness
+    public string BorderColor { get; set; } = "#FF0000";
+    public string IslandColor { get; set; } = "#1E1E1E";
+    public string TextColor { get; set; } = "#FFFFF0";
     public string FontFamily { get; set; } = "Segoe UI";
-    // true = 24-hour clock, false = 12-hour with AM/PM. First run follows your Windows setting.
-    public bool Use24Hour { get; set; } =
-        System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.ShortTimePattern.Contains('H');
-    public double CompactOpacity { get; set; } = 0.8;      // island opacity while collapsed (0.3 .. 1)
-    public double ExpandedOpacity { get; set; } = 1.0;     // island opacity while expanded (0.3 .. 1)
+    public bool Use24Hour { get; set; }
+    public double CompactOpacity { get; set; } = 0.9;      // island opacity while collapsed (0.3 .. 1)
+    public double ExpandedOpacity { get; set; } = 0.85;     // island opacity while expanded (0.3 .. 1)
     public double PositionX { get; set; } = 50;            // 0..100 % across the screen (50 = centred)
-    public double OffsetY { get; set; } = 0;               // px below the top of the screen
-    public bool ShowSpotifyLyrics { get; set; }
+    public double OffsetY { get; set; } = 15;              // px below the top of the screen
+    public bool ShowSpotifyLyrics { get; set; } = true;
+    public bool FrostedGlass { get; set; } = false;
 
     private static string FilePath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
