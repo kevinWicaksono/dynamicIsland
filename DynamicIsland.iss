@@ -3,7 +3,7 @@
 
 #define AppName "Dynamic Island"
 #define AppExe  "DynamicIsland.exe"
-#define AppVersion "1.1.1"
+#define AppVersion "1.3.0"
 #define PublishDir "bin\Release\net8.0-windows10.0.19041.0\win-x64\publish"
 
 [Setup]
