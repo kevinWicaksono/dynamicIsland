@@ -289,23 +289,27 @@
                                 Background="#FF30D158" VerticalAlignment="Center" />
                     </StackPanel>
 
-                    <!-- Current and upcoming lyric -->
+                    <!-- Current and next lyric; the next line is hidden if both do not fit. -->
                     <StackPanel x:Name="LyricsPanel" Grid.Row="0" Grid.Column="2"
                                 VerticalAlignment="Center" Margin="8,0,0,0" Visibility="Collapsed">
-                        <StackPanel x:Name="SyncedLyricsPanel">
+                        <StackPanel x:Name="SyncedLyricsPanel" Height="72" VerticalAlignment="Center"
+                                    ClipToBounds="True">
                             <TextBlock x:Name="CurrentLyricText" Foreground="{DynamicResource TextBrush}"
                                        FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap"
-                                       TextTrimming="CharacterEllipsis" MaxHeight="42" />
+                                       TextTrimming="CharacterEllipsis" MaxHeight="72" />
                             <TextBlock x:Name="NextLyricText" Foreground="{DynamicResource SubBrush}"
                                        FontSize="11" TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
-                                       MaxHeight="36" Margin="0,6,0,0" />
+                                       MaxHeight="72" Margin="0,6,0,0" Visibility="Collapsed" />
                         </StackPanel>
-                        <ScrollViewer x:Name="PlainLyricsScroll" Height="88" Margin="0,0,4,0"
-                                      VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
-                                      Visibility="Collapsed">
+                        <StackPanel x:Name="PlainLyricsPanel" Height="72" VerticalAlignment="Center"
+                                    ClipToBounds="True" Visibility="Collapsed">
                             <TextBlock x:Name="PlainLyricsText" Foreground="{DynamicResource TextBrush}"
-                                       FontSize="12" TextWrapping="Wrap" />
-                        </ScrollViewer>
+                                       FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap"
+                                       TextTrimming="CharacterEllipsis" MaxHeight="72" />
+                            <TextBlock x:Name="PlainNextLyricsText" Foreground="{DynamicResource SubBrush}"
+                                       FontSize="11" TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
+                                       MaxHeight="72" Margin="0,6,0,0" Visibility="Collapsed" />
+                        </StackPanel>
                     </StackPanel>
 
                     <!-- Controls, under the thumbnail -->

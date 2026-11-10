@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Runtime.InteropServices;
 using System.Net.Http;
 using System.Text.Json;
@@ -37,7 +38,6 @@ public partial class MainWindow : Window
     private string? _lyricsTrackKey;
     private IReadOnlyList<TimedLyricLine> _timedLyrics = Array.Empty<TimedLyricLine>();
     private string? _lastDisplayedLyric;
-    private string? _lastDisplayedNextLyric;
 
     private bool _expanded;
     private bool _hasMedia;
@@ -72,6 +72,7 @@ public partial class MainWindow : Window
 
     public AppSettings Prefs { get; set; } = AppSettings.Load();
 
+    /// <summary>Initializes the island UI, applies saved preferences, and starts its update timers.</summary>
     public MainWindow()
     {
         InitializeComponent();
@@ -106,6 +107,7 @@ public partial class MainWindow : Window
 
     // ───────────────────────── Optional media lyrics ─────────────────────────
 
+    /// <summary>Reloads or clears lyrics to reflect the current lyrics setting and media session.</summary>
     public void RefreshLyricsSetting()
     {
         UpdateExpandedVisualizerPlacement();
@@ -119,6 +121,7 @@ public partial class MainWindow : Window
         StartLyricsLookup(session, TitleText.Text, ArtistText.Text);
     }
 
+    /// <summary>Starts a lyric lookup for the newly received media metadata, if lyrics are enabled.</summary>
     private void UpdateLyricsForMedia(
         GlobalSystemMediaTransportControlsSession session,
         GlobalSystemMediaTransportControlsSessionMediaProperties props)
@@ -133,6 +136,7 @@ public partial class MainWindow : Window
         StartLyricsLookup(session, props.Title, artist);
     }
 
+    /// <summary>Prepares the lyric display and starts a cancellable lookup for the specified track.</summary>
     private void StartLyricsLookup(
         GlobalSystemMediaTransportControlsSession session,
         string title,
@@ -151,15 +155,19 @@ public partial class MainWindow : Window
         _lyricsTrackKey = key;
         _timedLyrics = Array.Empty<TimedLyricLine>();
         _lastDisplayedLyric = null;
-        _lastDisplayedNextLyric = null;
         CurrentLyricText.Text = "Loading lyrics…";
         NextLyricText.Text = "";
+        NextLyricText.Visibility = Visibility.Collapsed;
         SyncedLyricsPanel.Visibility = Visibility.Visible;
-        PlainLyricsScroll.Visibility = Visibility.Collapsed;
+        PlainLyricsPanel.Visibility = Visibility.Collapsed;
+        PlainLyricsText.Text = "";
+        PlainNextLyricsText.Text = "";
+        PlainNextLyricsText.Visibility = Visibility.Collapsed;
         LyricsPanel.Visibility = Visibility.Visible;
         _ = LoadLyricsAsync(key, title, artist, cancellation);
     }
 
+    /// <summary>Fetches lyrics and updates the UI if the request still belongs to the current track.</summary>
     private async Task LoadLyricsAsync(
         string key,
         string title,
@@ -186,9 +194,12 @@ public partial class MainWindow : Window
             }
             else if (!string.IsNullOrWhiteSpace(lyrics.PlainLyrics))
             {
-                PlainLyricsText.Text = lyrics.PlainLyrics;
+                var (current, next) = GetFirstTwoSentences(lyrics.PlainLyrics);
+                PlainLyricsText.Text = current;
                 SyncedLyricsPanel.Visibility = Visibility.Collapsed;
-                PlainLyricsScroll.Visibility = Visibility.Visible;
+                PlainLyricsPanel.Visibility = Visibility.Visible;
+                PlainNextLyricsText.Text = next;
+                UpdateNextLyricVisibility(PlainLyricsPanel, PlainNextLyricsText);
             }
             else
             {
@@ -226,6 +237,7 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>Chooses and displays the current timed lyric line from the player's position.</summary>
     private void UpdateCurrentLyric(GlobalSystemMediaTransportControlsSession? session)
     {
         if (_timedLyrics.Count == 0 || session == null) return;
@@ -251,12 +263,9 @@ public partial class MainWindow : Window
             if (!string.Equals(currentLine, _lastDisplayedLyric, StringComparison.Ordinal))
             {
                 CurrentLyricText.Text = currentLine;
-                _lastDisplayedLyric = currentLine;
-            }
-            if (!string.Equals(nextLine, _lastDisplayedNextLyric, StringComparison.Ordinal))
-            {
                 NextLyricText.Text = nextLine;
-                _lastDisplayedNextLyric = nextLine;
+                UpdateNextLyricVisibility(SyncedLyricsPanel, NextLyricText);
+                _lastDisplayedLyric = currentLine;
             }
         }
         catch (COMException)
@@ -265,13 +274,41 @@ public partial class MainWindow : Window
             if (_lastDisplayedLyric == null)
             {
                 CurrentLyricText.Text = _timedLyrics[0].Text;
-                _lastDisplayedLyric = _timedLyrics[0].Text;
                 NextLyricText.Text = _timedLyrics.Count > 1 ? _timedLyrics[1].Text : "";
-                _lastDisplayedNextLyric = NextLyricText.Text;
+                UpdateNextLyricVisibility(SyncedLyricsPanel, NextLyricText);
+                _lastDisplayedLyric = _timedLyrics[0].Text;
             }
         }
     }
 
+    /// <summary>Returns the first two sentences from plain lyrics.</summary>
+    private static (string Current, string Next) GetFirstTwoSentences(string lyrics)
+    {
+        var sentences = Regex.Split(lyrics.Trim(), @"(?<=[.!?])\s+|\r?\n+")
+            .Select(sentence => sentence.Trim())
+            .Where(sentence => sentence.Length > 0)
+            .Take(2)
+            .ToArray();
+
+        return (sentences.ElementAtOrDefault(0) ?? "", sentences.ElementAtOrDefault(1) ?? "");
+    }
+
+    /// <summary>Shows the next lyric only when both lyric lines fit in the available display height.</summary>
+    private static void UpdateNextLyricVisibility(
+        System.Windows.Controls.StackPanel panel,
+        System.Windows.Controls.TextBlock nextLyric)
+    {
+        nextLyric.Visibility = string.IsNullOrWhiteSpace(nextLyric.Text)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+        if (nextLyric.Visibility == Visibility.Collapsed) return;
+
+        panel.Measure(new Size(panel.ActualWidth, double.PositiveInfinity));
+        if (panel.DesiredSize.Height > panel.Height)
+            nextLyric.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>Cancels pending lyric work and clears all lyric content from the UI.</summary>
     private void ClearLyrics()
     {
         _lyricsCancellation?.Cancel();
@@ -279,16 +316,19 @@ public partial class MainWindow : Window
         _lyricsTrackKey = null;
         _timedLyrics = Array.Empty<TimedLyricLine>();
         _lastDisplayedLyric = null;
-        _lastDisplayedNextLyric = null;
         LyricsPanel.Visibility = Visibility.Collapsed;
         SyncedLyricsPanel.Visibility = Visibility.Visible;
-        PlainLyricsScroll.Visibility = Visibility.Collapsed;
+        PlainLyricsPanel.Visibility = Visibility.Collapsed;
         PlainLyricsText.Text = "";
+        PlainNextLyricsText.Text = "";
+        PlainNextLyricsText.Visibility = Visibility.Collapsed;
         CurrentLyricText.Text = "";
         NextLyricText.Text = "";
+        NextLyricText.Visibility = Visibility.Collapsed;
         UpdateExpandedVisualizerPlacement();
     }
 
+    /// <summary>Places the expanded audio visualizer according to whether lyrics are enabled.</summary>
     private void UpdateExpandedVisualizerPlacement()
     {
         bool showAtLyricsPosition = !Prefs.ShowSpotifyLyrics;
@@ -339,8 +379,10 @@ public partial class MainWindow : Window
         QueueIslandRegionUpdate();
     }
 
+    /// <summary>Applies the configured island color to the native window backdrop.</summary>
     private void ApplyWindowBackdrop() => ApplyWindowBackdrop(ParseColor(Prefs.IslandColor, Colors.Black));
 
+    /// <summary>Enables or removes the native acrylic backdrop using the supplied tint color.</summary>
     private void ApplyWindowBackdrop(Color tint)
     {
         var handle = new WindowInteropHelper(this).Handle;
@@ -378,6 +420,7 @@ public partial class MainWindow : Window
         QueueIslandRegionUpdate();
     }
 
+    /// <summary>Schedules one deferred update of the native window's rounded hit-test region.</summary>
     private void QueueIslandRegionUpdate()
     {
         if (_islandRegionUpdateQueued) return;
@@ -389,6 +432,7 @@ public partial class MainWindow : Window
         }));
     }
 
+    /// <summary>Fits the native window region to the island, including the acrylic backdrop area.</summary>
     private void UpdateIslandRegion()
     {
         var handle = new WindowInteropHelper(this).Handle;
@@ -464,26 +508,32 @@ public partial class MainWindow : Window
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
+    /// <summary>Calls Windows to apply composition effects such as the acrylic backdrop.</summary>
     private static extern bool SetWindowCompositionAttribute(
         IntPtr hwnd, ref WindowCompositionAttributeData data);
 
     [DllImport("gdi32.dll", SetLastError = true)]
+    /// <summary>Creates a native rounded-rectangle region for the island window.</summary>
     private static extern IntPtr CreateRoundRectRgn(
         int left, int top, int right, int bottom, int ellipseWidth, int ellipseHeight);
 
     [DllImport("user32.dll", SetLastError = true)]
+    /// <summary>Assigns a native region to the window to constrain its shape and hit area.</summary>
     private static extern int SetWindowRgn(IntPtr hwnd, IntPtr region, [MarshalAs(UnmanagedType.Bool)] bool redraw);
 
+    /// <summary>Releases a native graphics object created for the window region.</summary>
     [DllImport("gdi32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool DeleteObject(IntPtr handle);
 
+    /// <summary>Parses a color string, returning a fallback if the value is invalid.</summary>
     private static Color ParseColor(string hex, Color fallback)
     {
         try { return (Color)ColorConverter.ConvertFromString(hex); }
         catch { return fallback; }
     }
 
+    /// <summary>Creates a reusable, immutable brush for the specified color.</summary>
     private static SolidColorBrush Frozen(Color c)
     {
         var b = new SolidColorBrush(c);
@@ -491,6 +541,7 @@ public partial class MainWindow : Window
         return b;
     }
 
+    /// <summary>Opens the settings window, or brings its existing instance forward.</summary>
     private void Settings_Click(object sender, RoutedEventArgs e)
     {
         if (_settingsWindow != null) { _settingsWindow.Activate(); return; }
@@ -501,6 +552,7 @@ public partial class MainWindow : Window
 
     // ───────────────────────── Clock ─────────────────────────
 
+    /// <summary>Refreshes displayed date and time using the user's selected clock format.</summary>
     private void UpdateClock()
     {
         var now = DateTime.Now;
@@ -521,8 +573,10 @@ public partial class MainWindow : Window
     //  • click a button / the slider / the album art       → does its own job, island stays open
 
     [DllImport("user32.dll")]
+    /// <summary>Reads the current state of a virtual key, used to detect mouse clicks outside the island.</summary>
     private static extern short GetAsyncKeyState(int vKey);
 
+    /// <summary>Handles island clicks for expanding, collapsing, and seeking on the progress border.</summary>
     private void Island_PreviewMouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         // Pressing on the border (or the thin halo just outside it): jump / scrub in the track.
@@ -558,6 +612,7 @@ public partial class MainWindow : Window
             Collapse();                                           // clicked empty space, or outside the island
     }
 
+    /// <summary>Switches to the expanded view and begins monitoring for outside clicks.</summary>
     private void Expand()
     {
         if (_expanded) return;
@@ -568,6 +623,7 @@ public partial class MainWindow : Window
         _outsideTimer.Start();
     }
 
+    /// <summary>Switches back to the compact view and stops monitoring for outside clicks.</summary>
     private void Collapse()
     {
         if (!_expanded) return;
@@ -577,6 +633,7 @@ public partial class MainWindow : Window
     }
 
     // True when the clicked element is (inside) a button, the volume slider or the album art.
+    /// <summary>Determines whether an element belongs to a control that should keep the island expanded.</summary>
     private bool IsInteractive(DependencyObject? d)
     {
         while (d != null && !ReferenceEquals(d, Island))
@@ -597,6 +654,7 @@ public partial class MainWindow : Window
 
     // Only runs while expanded: it just asks "is a mouse button down, and is the pointer outside the island?"
     // Nothing is recorded and no other app's content is read.
+    /// <summary>Collapses the expanded island when a new mouse press occurs outside it.</summary>
     private void CheckOutsideClick()
     {
         bool down = (GetAsyncKeyState(0x01) & 0x8000) != 0 || (GetAsyncKeyState(0x02) & 0x8000) != 0;
@@ -606,6 +664,7 @@ public partial class MainWindow : Window
     }
 
     // Scroll over the expanded island → volume in 2% steps
+    /// <summary>Adjusts system volume in 2% increments when the wheel is used over the expanded island.</summary>
     private void Island_MouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
     {
         if (!_expanded) return;
@@ -618,22 +677,35 @@ public partial class MainWindow : Window
 
     // ───────────────────────── Album art click → bring the player to the front ─────────────────────────
 
+    /// <summary>Callback signature used while enumerating top-level Windows.</summary>
     private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
+    /// <summary>Enumerates top-level windows and invokes the supplied callback for each.</summary>
     [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc cb, IntPtr lParam);
+    /// <summary>Reports whether a window is visible.</summary>
     [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
+    /// <summary>Reports whether a window is minimized.</summary>
     [DllImport("user32.dll")] private static extern bool IsIconic(IntPtr hWnd);
+    /// <summary>Shows or restores a window using the requested display command.</summary>
     [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    /// <summary>Requests that a window become the foreground window.</summary>
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
+    /// <summary>Gets the handle of the current foreground window.</summary>
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+    /// <summary>Requests that Windows switch to the specified window.</summary>
     [DllImport("user32.dll")] private static extern void SwitchToThisWindow(IntPtr hWnd, bool fAltTab);
+    /// <summary>Gets the number of characters in a window's title.</summary>
     [DllImport("user32.dll")] private static extern int GetWindowTextLength(IntPtr hWnd);
+    /// <summary>Copies a window's title into a text buffer.</summary>
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int maxCount);
+    /// <summary>Gets the process identifier associated with a window.</summary>
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+    /// <summary>Gets a specified window attribute, such as whether it is a tool window.</summary>
     [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
     private static extern int GetWindowLong(IntPtr hWnd, int index);
 
+    /// <summary>Brings the current media player's window forward when the album art is clicked.</summary>
     private void Album_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         BringPlayerToFront();
@@ -657,6 +729,7 @@ public partial class MainWindow : Window
         // 1) Which processes belong to the player?
         string? exactName = null;
         var keywords = new List<string>();
+        // Adds a distinct app-name fragment used to match the player process.
         void AddKeyword(string k)
         {
             if (k.Length >= 4 && !keywords.Contains(k, StringComparer.OrdinalIgnoreCase)) keywords.Add(k);
@@ -739,6 +812,7 @@ public partial class MainWindow : Window
     private const double CompactPadding = 14;    // padding inside the collapsed island – the same on all four sides
 
     /// <summary>Collapsed size = size of its content + the same padding on every side.</summary>
+    /// <summary>Measures and returns the compact island's content width plus its padding.</summary>
     private double CompactWidth()
     {
         CompactPanel.Visibility = Visibility.Visible;   // must be visible to be measured
@@ -747,12 +821,14 @@ public partial class MainWindow : Window
     }
 
     // Call right after CompactWidth (which measures the panel): same padding on top and bottom
+    /// <summary>Returns the compact island's measured content height plus its padding.</summary>
     private double CompactHeight()
     {
         return Math.Ceiling(CompactPanel.DesiredSize.Height) + CompactPadding * 2;
     }
 
     // Text (time, date) can change width, so keep the 20 px padding exact
+    /// <summary>Animates the compact island to fit its current date and time text.</summary>
     private void UpdateCompactWidth()
     {
         double w = CompactWidth();
@@ -761,6 +837,7 @@ public partial class MainWindow : Window
         if (Math.Abs(h - Island.Height) > 1.5) Animate(Island, HeightProperty, h, 250);
     }
 
+    /// <summary>Animates the island's dimensions, opacity, and visible panel for its current state.</summary>
     private void ApplySize()
     {
         double w, h;
@@ -787,12 +864,14 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>Animates a dependency property to a target value with the shared easing curve.</summary>
     private static void Animate(FrameworkElement el, DependencyProperty prop, double to, int ms)
     {
         el.BeginAnimation(prop, new DoubleAnimation(to, TimeSpan.FromMilliseconds(ms)) { EasingFunction = Ease });
     }
 
     // Keep the pill shape and the border outline in sync while the size animates
+    /// <summary>Updates the island's pill corners and native rounded region after a resize.</summary>
     private void Island_SizeChanged(object sender, SizeChangedEventArgs e)
     {
         Island.CornerRadius = new CornerRadius(Math.Min(e.NewSize.Height / 2, 36));
@@ -840,6 +919,7 @@ public partial class MainWindow : Window
         UpdateDash();
     }
 
+    /// <summary>Sets the progress stroke dash length to match the current playback fraction.</summary>
     private void UpdateDash()
     {
         double t = Prefs.BorderThickness;
@@ -850,6 +930,7 @@ public partial class MainWindow : Window
         ProgressPath.StrokeDashArray = new DoubleCollection { p * _perimeter / t, _perimeter / t + 2 };
     }
 
+    /// <summary>Shows or hides the static border and playback progress arc as appropriate.</summary>
     private void UpdateProgressVisual()
     {
         bool show = Prefs.BorderThickness > 0.05;
@@ -860,6 +941,7 @@ public partial class MainWindow : Window
         UpdateDash();
     }
 
+    /// <summary>Stores playback progress and refreshes the border when its availability changes.</summary>
     private void SetProgress(bool has, double value)
     {
         bool changed = has != _hasProgress;
@@ -869,6 +951,7 @@ public partial class MainWindow : Window
         else if (has) UpdateDash();
     }
 
+    /// <summary>Reads the current media timeline and updates progress and synchronized lyrics.</summary>
     private void UpdateProgress()
     {
         var session = _session;
@@ -973,6 +1056,7 @@ public partial class MainWindow : Window
     // ───────────────────────── Click the border to jump in the track ─────────────────────────
 
     // While dragging: follow the pointer around the border. Otherwise: hand cursor over the border.
+    /// <summary>Updates seek dragging and the cursor when the pointer moves over the progress border.</summary>
     private void Island_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
     {
         var pos = e.GetPosition(Island);
@@ -1002,6 +1086,7 @@ public partial class MainWindow : Window
         double bestD = double.MaxValue, bestLen = 0, cum = 0;
 
         // nearest point on a straight piece of the outline
+        // Projects the pointer onto a straight edge and records its distance along the outline.
         void Straight(double ax, double ay, double bx, double by)
         {
             double dx = bx - ax, dy = by - ay;
@@ -1017,6 +1102,7 @@ public partial class MainWindow : Window
         }
 
         // nearest point on a quarter-circle corner (angles in radians, a0 < a1, clockwise on screen)
+        // Projects the pointer onto a rounded corner and records its distance along the outline.
         void Arc(double ccx, double ccy, double a0, double a1)
         {
             double ang = Math.Atan2(p.Y - ccy, p.X - ccx);
@@ -1050,6 +1136,7 @@ public partial class MainWindow : Window
         return true;
     }
 
+    /// <summary>Begins dragging along the progress outline and captures mouse movement.</summary>
     private void BeginScrub(double fraction)
     {
         _scrubbing = true;
@@ -1058,6 +1145,7 @@ public partial class MainWindow : Window
         UpdateScrub(fraction);
     }
 
+    /// <summary>Updates the displayed seek position and time hint while the user drags.</summary>
     private void UpdateScrub(double fraction)
     {
         _scrubFraction = Math.Clamp(fraction, 0, 1);
@@ -1076,6 +1164,7 @@ public partial class MainWindow : Window
         catch { /* no timeline – the arc still moves */ }
     }
 
+    /// <summary>Ends a progress-border drag and asks the player to seek to the selected position.</summary>
     private void Island_PreviewMouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         if (!_scrubbing) return;
@@ -1085,6 +1174,7 @@ public partial class MainWindow : Window
         CommitScrub();
     }
 
+    /// <summary>Cancels a seek drag if the island loses mouse capture before release.</summary>
     private void Island_LostCapture(object sender, System.Windows.Input.MouseEventArgs e)
     {
         if (!_scrubbing) return;
@@ -1093,6 +1183,7 @@ public partial class MainWindow : Window
         CloseHint();
     }
 
+    /// <summary>Commits the dragged progress fraction and reports when the player cannot seek.</summary>
     private async void CommitScrub()
     {
         bool ok = await SeekToFractionAsync(_scrubFraction);
@@ -1100,6 +1191,7 @@ public partial class MainWindow : Window
         else ShowHint("This player doesn't allow jumping in the track", 2500);
     }
 
+    /// <summary>Converts a progress fraction to a media position and requests a seek from the player.</summary>
     private async Task<bool> SeekToFractionAsync(double fraction)
     {
         var session = _session;
@@ -1132,12 +1224,14 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>Formats a duration as minutes and seconds, or hours, minutes, and seconds.</summary>
     private static string FormatTime(TimeSpan t) =>
         t.TotalHours >= 1
             ? $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}"
             : $"{(int)t.TotalMinutes}:{t.Seconds:00}";
 
     // A small bubble under the island: shows the time while dragging, or a short message
+    /// <summary>Displays a tooltip below the island, optionally closing it after a timeout.</summary>
     private void ShowHint(string text, int autoCloseMs = 0)
     {
         _hintTip ??= new System.Windows.Controls.ToolTip
@@ -1174,12 +1268,14 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>Closes the seek/status tooltip and stops its auto-close timer.</summary>
     private void CloseHint()
     {
         _hintTimer?.Stop();
         if (_hintTip != null) _hintTip.IsOpen = false;
     }
 
+    /// <summary>Connects to Windows media sessions and begins tracking the active player.</summary>
     private async Task InitMediaAsync()
     {
         try
@@ -1194,6 +1290,7 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>Subscribes to the current media session, detaching from any previous session.</summary>
     private void AttachSession()
     {
         if (_session != null)
@@ -1217,9 +1314,11 @@ public partial class MainWindow : Window
         _ = RefreshMediaAsync();
     }
 
+    /// <summary>Schedules a refresh when the active player's metadata, playback, or timeline changes.</summary>
     private void OnMediaChanged(GlobalSystemMediaTransportControlsSession s, object args)
         => Dispatcher.InvokeAsync(RefreshMediaAsync);
 
+    /// <summary>Reads active-player metadata and updates the controls, lyrics, artwork, and progress.</summary>
     private async Task RefreshMediaAsync()
     {
         var session = _session;
@@ -1267,6 +1366,7 @@ public partial class MainWindow : Window
     }
 
     // Album art is decoded in memory only – never written anywhere.
+    /// <summary>Loads the active track's artwork into memory and displays it without saving it to disk.</summary>
     private async Task LoadAlbumArtAsync(GlobalSystemMediaTransportControlsSessionMediaProperties props)
     {
         AlbumArt.Source = null;
@@ -1295,6 +1395,7 @@ public partial class MainWindow : Window
         catch { /* no artwork – placeholder note is shown */ }
     }
 
+    /// <summary>Clears media UI and progress when no supported active media session is available.</summary>
     private void SetNoMedia()
     {
         ClearLyrics();
@@ -1316,16 +1417,19 @@ public partial class MainWindow : Window
 
     // ───────────────────────── Media controls ─────────────────────────
 
+    /// <summary>Toggles playback in the current media session.</summary>
     private async void PlayPause_Click(object sender, RoutedEventArgs e)
     {
         if (_session != null) await _session.TryTogglePlayPauseAsync();
     }
 
+    /// <summary>Requests playback of the previous track in the current media session.</summary>
     private async void Prev_Click(object sender, RoutedEventArgs e)
     {
         if (_session != null) await _session.TrySkipPreviousAsync();
     }
 
+    /// <summary>Requests playback of the next track in the current media session.</summary>
     private async void Next_Click(object sender, RoutedEventArgs e)
     {
         if (_session != null) await _session.TrySkipNextAsync();
@@ -1333,6 +1437,7 @@ public partial class MainWindow : Window
 
     // ───────────────────────── Volume ─────────────────────────
 
+    /// <summary>Reads Windows master volume and mute state into the island's volume controls.</summary>
     private void SyncVolume()
     {
         var v = AudioVolume.GetVolume();
@@ -1345,6 +1450,7 @@ public partial class MainWindow : Window
         _syncingVolume = false;
     }
 
+    /// <summary>Writes slider changes to Windows master volume and refreshes the mute icon.</summary>
     private void Volume_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (VolumeLabel != null) VolumeLabel.Text = $"{Math.Round(e.NewValue):0}%";
@@ -1355,6 +1461,7 @@ public partial class MainWindow : Window
         VolumeBtn.Content = e.NewValue <= 0 ? "\uE74F" : "\uE767";
     }
 
+    /// <summary>Toggles Windows master mute and synchronizes the volume controls.</summary>
     private void Mute_Click(object sender, RoutedEventArgs e)
     {
         bool muted = AudioVolume.GetMute() == true;
@@ -1362,5 +1469,6 @@ public partial class MainWindow : Window
         SyncVolume();
     }
 
+    /// <summary>Closes the Dynamic Island application.</summary>
     private void Exit_Click(object sender, RoutedEventArgs e) => Application.Current.Shutdown();
 }

@@ -25,6 +25,7 @@ public partial class SettingsWindow : Window
         "#FF9F0A", "#FFD60A", "#BF5AF2", "#FF375F", "#64D2FF"
     };
 
+    /// <summary>Creates the settings window, builds its controls, and fills them with saved preferences.</summary>
     public SettingsWindow(MainWindow main)
     {
         _main = main;
@@ -43,9 +44,11 @@ public partial class SettingsWindow : Window
         _loading = false;
     }
 
+    /// <summary>Gets the preferences object shared with the main window.</summary>
     private AppSettings P => _main.Prefs;
 
     // Version and author come from DynamicIsland.csproj (<Version> and <Company>)
+    /// <summary>Displays the app version and publisher in the settings window.</summary>
     private void ShowAbout()
     {
         var asm = System.Reflection.Assembly.GetExecutingAssembly();
@@ -58,6 +61,7 @@ public partial class SettingsWindow : Window
             : $"Version {version}  ·  by {company!.Company}";
     }
 
+    /// <summary>Copies current preferences into the controls without triggering live updates.</summary>
     private void LoadControls()
     {
         _loading = true;
@@ -87,6 +91,7 @@ public partial class SettingsWindow : Window
         _loading = false;
     }
 
+    /// <summary>Adds preset color buttons that fill the associated hexadecimal color field.</summary>
     private static void BuildSwatches(Panel panel, TextBox target)
     {
         foreach (var hex in Palette)
@@ -109,6 +114,7 @@ public partial class SettingsWindow : Window
 
     // ── live-apply handlers ──
 
+    /// <summary>Updates island size when the scale slider changes.</summary>
     private void Scale_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (_loading) return;
@@ -117,6 +123,7 @@ public partial class SettingsWindow : Window
         _main.ApplySettings();
     }
 
+    /// <summary>Updates border and playback-progress thickness when the slider changes.</summary>
     private void Thickness_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (_loading) return;
@@ -125,8 +132,10 @@ public partial class SettingsWindow : Window
         _main.ApplySettings();
     }
 
+    /// <summary>Formats a horizontal position as Left, Center, Right, or a percentage.</summary>
     private static string PosXText(double v) => v <= 0 ? "Left" : v >= 100 ? "Right" : Math.Abs(v - 50) < 0.5 ? "Center" : $"{v:0}%";
 
+    /// <summary>Updates the island's horizontal screen position.</summary>
     private void PosX_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (_loading) return;
@@ -135,6 +144,7 @@ public partial class SettingsWindow : Window
         _main.ApplySettings();
     }
 
+    /// <summary>Updates the island's distance from the top of the screen.</summary>
     private void PosY_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (_loading) return;
@@ -143,10 +153,14 @@ public partial class SettingsWindow : Window
         _main.ApplySettings();
     }
 
+    /// <summary>Moves the horizontal-position slider to the left edge.</summary>
     private void PosLeft_Click(object sender, RoutedEventArgs e) => PosXSlider.Value = 0;
+    /// <summary>Moves the horizontal-position slider to the center.</summary>
     private void PosCenter_Click(object sender, RoutedEventArgs e) => PosXSlider.Value = 50;
+    /// <summary>Moves the horizontal-position slider to the right edge.</summary>
     private void PosRight_Click(object sender, RoutedEventArgs e) => PosXSlider.Value = 100;
 
+    /// <summary>Updates the opacity used while the island is collapsed.</summary>
     private void CompactOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (_loading) return;
@@ -155,6 +169,7 @@ public partial class SettingsWindow : Window
         _main.ApplySettings();
     }
 
+    /// <summary>Updates the opacity used while the island is expanded.</summary>
     private void ExpandedOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (_loading) return;
@@ -163,6 +178,7 @@ public partial class SettingsWindow : Window
         _main.ApplySettings();
     }
 
+    /// <summary>Applies the selected 12-hour or 24-hour clock format.</summary>
     private void Clock_Checked(object sender, RoutedEventArgs e)
     {
         if (_loading) return;
@@ -170,6 +186,7 @@ public partial class SettingsWindow : Window
         _main.ApplySettings();
     }
 
+    /// <summary>Enables or disables lyric lookup and refreshes the lyric display.</summary>
     private void ShowLyrics_Changed(object sender, RoutedEventArgs e)
     {
         if (_loading) return;
@@ -177,6 +194,7 @@ public partial class SettingsWindow : Window
         _main.RefreshLyricsSetting();
     }
 
+    /// <summary>Applies a valid hexadecimal color to the setting selected by the text field's tag.</summary>
     private void Color_TextChanged(object sender, TextChangedEventArgs e)
     {
         if (_loading) return;
@@ -194,6 +212,7 @@ public partial class SettingsWindow : Window
         _main.ApplySettings();
     }
 
+    /// <summary>Applies the selected font family to the island.</summary>
     private void Font_Changed(object sender, SelectionChangedEventArgs e)
     {
         if (_loading) return;
@@ -204,6 +223,7 @@ public partial class SettingsWindow : Window
         }
     }
 
+    /// <summary>Restores default preferences and refreshes the window and lyric display.</summary>
     private void Reset_Click(object sender, RoutedEventArgs e)
     {
         _main.Prefs = new AppSettings();
@@ -212,8 +232,10 @@ public partial class SettingsWindow : Window
         _main.RefreshLyricsSetting();
     }
 
+    /// <summary>Closes the settings window.</summary>
     private void Done_Click(object sender, RoutedEventArgs e) => Close();
 
+    /// <summary>Saves preferences when the settings window closes.</summary>
     protected override void OnClosed(EventArgs e)
     {
         base.OnClosed(e);

@@ -24,10 +24,12 @@ public class AppSettings
     public bool ShowSpotifyLyrics { get; set; } = true;
     public bool FrostedGlass { get; set; } = false;
 
+    /// <summary>Gets the per-user path where the app stores its settings.</summary>
     private static string FilePath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "DynamicIsland", "settings.json");
 
+    /// <summary>Loads saved preferences, clamps supported values, or returns defaults if none are available.</summary>
     public static AppSettings Load()
     {
         try
@@ -52,6 +54,7 @@ public class AppSettings
         return new AppSettings();
     }
 
+    /// <summary>Saves the current preferences to the user's settings file.</summary>
     public static void Save(AppSettings s)
     {
         try

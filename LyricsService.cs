@@ -18,6 +18,7 @@ internal static class LyricsService
         @"\[(?<minutes>\d{1,3}):(?<seconds>\d{2})(?:\.(?<fraction>\d{1,3}))?\]",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    /// <summary>Creates the HTTP client used for lyric lookups and identifies this app to the service.</summary>
     private static HttpClient CreateClient()
     {
         var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
@@ -26,6 +27,7 @@ internal static class LyricsService
         return client;
     }
 
+    /// <summary>Looks up lyrics by track and artist, then falls back to searching by title.</summary>
     public static async Task<LyricsResult?> GetLyricsAsync(
         string title,
         string artist,
@@ -60,6 +62,7 @@ internal static class LyricsService
         return ToLyricsResult(bestMatch);
     }
 
+    /// <summary>Converts a service response into a result, or null when it contains no lyrics.</summary>
     private static LyricsResult? ToLyricsResult(LrclibResponse? data)
     {
         if (data == null) return null;
@@ -68,6 +71,7 @@ internal static class LyricsService
         return new LyricsResult(data.PlainLyrics, timedLines);
     }
 
+    /// <summary>Parses timestamped lyric lines and orders them by playback time.</summary>
     private static IReadOnlyList<TimedLyricLine> ParseTimedLyrics(string? syncedLyrics)
     {
         if (string.IsNullOrWhiteSpace(syncedLyrics)) return Array.Empty<TimedLyricLine>();
